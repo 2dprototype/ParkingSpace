@@ -2,8 +2,10 @@ function love.load()
     -- Game state
     game = {
         debugMode = false,
-        state = "playing", -- playing, paused, gameover
-        score = 0
+        state = "playing", -- playing, paused, gameover, landed
+        score = 0,
+        message = "",
+        messageTimer = 0
     }
     
     -- Physics world setup - ZERO GRAVITY in space
@@ -27,11 +29,17 @@ function love.load()
     pulsars = {}
     quasars = {}
     supernovae = {}
+    magnetars = {}
+    asteroidfields = {}
+    spacestations = {}
     
     createSolarSystem() -- Create sun and orbiting planets
     createAsteroidBelts() -- Create asteroid belts
     createCosmicObjects() -- Create black holes, white holes, wormholes, and nebulae
     createAdvancedCosmicObjects() -- Create comets, pulsars, quasars, supernovae
+    createMagnetars() -- Create magnetars
+    createAsteroidFields() -- Create dense asteroid fields
+    createSpaceStations() -- Create space stations
     createPlayer()
     createEnemies()
     createBalls()
@@ -40,11 +48,11 @@ function love.load()
     camera = {
         x = 0, 
         y = 0, 
-        scale = 0.001, -- Start even more zoomed out for massive solar system view
+        scale = 0.01, -- Start even more zoomed out for massive solar system view
         mode = "follow_player",
         target = nil,
         freeMoveSpeed = 20000, -- Much faster movement for huge space
-        minScale = 0.0001,     -- Can zoom out to see entire massive solar system
+        minScale = 0.004,     -- Can zoom out to see entire massive solar system
         maxScale = 2.0
     }
     
@@ -58,7 +66,11 @@ function love.load()
         "R: Reset Zoom",
         "F5: Toggle Debug Mode",
         "Enter: Visit Planet",
-        "H: Toggle Controls"
+        "L: Land/Takeoff",
+        "H: Toggle Controls",
+        "Shift: Boost",
+        "Space: Brake",
+        "C: Toggle Docking Computer"
     }
     
     -- Debug info
@@ -68,6 +80,25 @@ function love.load()
         showPhysicsInfo = true,
         showObjectCounts = true,
         showGravityZones = true
+    }
+    
+    -- Player ship systems
+    shipSystems = {
+        fuel = 1000,
+        maxFuel = 1000,
+        health = 100,
+        maxHealth = 100,
+        shields = 100,
+        maxShields = 100,
+        energy = 100,
+        maxEnergy = 100,
+        boostActive = false,
+        brakesActive = false,
+        autoDock = false,
+        landed = false,
+        landingPlanet = nil,
+        docked = false,
+        dockingStation = nil
     }
     
     -- Android touch controls
@@ -145,11 +176,140 @@ function love.load()
                 height = 60,
                 color = {0.2, 0.5, 1, 0.7},
                 active = false
+            },
+            {
+                id = "boost",
+                x = love.graphics.getWidth() - 100,
+                y = 260,
+                width = 60,
+                height = 60,
+                color = {1, 0.5, 0, 0.7},
+                active = false
+            },
+            {
+                id = "brake",
+                x = love.graphics.getWidth() - 100,
+                y = 340,
+                width = 60,
+                height = 60,
+                color = {1, 0, 0, 0.7},
+                active = false
+            },
+            {
+                id = "land",
+                x = 300,
+                y = love.graphics.getHeight() - 100,
+                width = 100,
+                height = 60,
+                color = {0, 0.5, 1, 0.7},
+                active = false
             }
         }
     }
-	
-	updateTouchButtonPositions()
+    
+    updateTouchButtonPositions()
+end
+
+function createMagnetars()
+    -- Create magnetars (highly magnetic neutron stars)
+    for i = 1, 2 do
+        local angle = love.math.random() * math.pi * 2
+        local distance = love.math.random(130000, 200000)
+        local x = math.cos(angle) * distance
+        local y = math.sin(angle) * distance
+        
+        local magnetar = {
+            body = love.physics.newBody(world, x, y, "static"),
+            radius = love.math.random(150, 300),
+            magneticRadius = love.math.random(4000, 8000),
+            magneticStrength = love.math.random(100000, 300000),
+            pulse = 0,
+            pulseSpeed = love.math.random(0.1, 0.2),
+            flareAngle = love.math.random() * math.pi * 2,
+            flareTimer = 0
+        }
+        
+        local shape = love.physics.newCircleShape(magnetar.radius)
+        magnetar.fixture = love.physics.newFixture(magnetar.body, shape, 1)
+        magnetar.fixture:setSensor(true)
+        
+        table.insert(magnetars, magnetar)
+    end
+end
+
+function createAsteroidFields()
+    -- Create dense asteroid fields with more hazards
+    for i = 1, 3 do
+        local angle = love.math.random() * math.pi * 2
+        local distance = love.math.random(70000, 150000)
+        local x = math.cos(angle) * distance
+        local y = math.sin(angle) * distance
+        
+        local field = {
+            x = x, y = y,
+            radius = love.math.random(5000, 12000),
+            density = love.math.random(50, 100),
+            asteroids = {}
+        }
+        
+        -- Create asteroids in this field
+        for j = 1, field.density do
+            local astAngle = love.math.random() * math.pi * 2
+            local astDist = love.math.random(0, field.radius)
+            local astX = x + math.cos(astAngle) * astDist
+            local astY = y + math.sin(astAngle) * astDist
+            local size = love.math.random(20, 80)
+            
+            local asteroid = createAsteroidObj(astX, astY, size)
+            asteroid.field = field
+            table.insert(field.asteroids, asteroid)
+            table.insert(box_i, asteroid)
+            
+            -- Give field asteroids some random motion
+            local speed = love.math.random(50, 200)
+            local vx = love.math.random(-speed, speed)
+            local vy = love.math.random(-speed, speed)
+            asteroid.body:setLinearVelocity(vx, vy)
+        end
+        
+        table.insert(asteroidfields, field)
+    end
+end
+
+function createSpaceStations()
+    -- Create space stations near planets
+    for i = 1, 4 do
+        local planetIndex = love.math.random(2, #planets) -- Don't put stations near sun
+        local planet = planets[planetIndex]
+        local px, py = planet.body:getPosition()
+        
+        local angle = love.math.random() * math.pi * 2
+        local distance = planet.radius + love.math.random(800, 1500)
+        local x = px + math.cos(angle) * distance
+        local y = py + math.sin(angle) * distance
+        
+        local station = {
+            body = love.physics.newBody(world, x, y, "static"),
+            radius = love.math.random(200, 400),
+            dockingRadius = 150,
+            planet = planet,
+            rotation = 0,
+            rotationSpeed = love.math.random(0.01, 0.03),
+            type = "station"
+        }
+        
+        local shape = love.physics.newCircleShape(station.radius)
+        station.fixture = love.physics.newFixture(station.body, shape, 1)
+        station.fixture:setSensor(true)
+        
+        -- Give station orbital velocity
+        local speed = math.sqrt(planet.gravityStrength / distance) * 0.95
+        local vx = -math.sin(angle) * speed
+        local vy = math.cos(angle) * speed
+        station.body:setLinearVelocity(vx, vy)
+        
+        table.insert(spacestations, station)
+    end
 end
 
 function createSolarSystem()
@@ -182,6 +342,7 @@ function createSolarSystem()
         planet.orbitSpeed = data[6]
         planet.orbitAngle = angle
         planet.initialAngle = angle
+        planet.landingRadius = data[2] + 100 -- Landing zone just above surface
         
         table.insert(planets, planet)
     end
@@ -205,7 +366,9 @@ function createCosmicObjects()
             gravityStrength = love.math.random(300000, 800000),
             type = "blackhole",
             rotation = 0,
-            rotationSpeed = love.math.random(0.01, 0.05)
+            rotationSpeed = love.math.random(0.01, 0.05),
+            damageRadius = love.math.random(1000, 2000),
+            damagePerSecond = 50
         }
         
         local shape = love.physics.newCircleShape(blackhole.radius)
@@ -229,7 +392,9 @@ function createCosmicObjects()
             repulsionStrength = love.math.random(100000, 300000),
             type = "whitehole",
             pulse = 0,
-            pulseSpeed = love.math.random(0.05, 0.1)
+            pulseSpeed = love.math.random(0.05, 0.1),
+            energyRadius = love.math.random(1000, 2500),
+            energyRecharge = 10 -- Energy recharge per second when nearby
         }
         
         local shape = love.physics.newCircleShape(whitehole.radius)
@@ -259,7 +424,8 @@ function createCosmicObjects()
             pairY = y2,
             rotation = 0,
             rotationSpeed = love.math.random(0.02, 0.05),
-            cooldown = 0
+            cooldown = 0,
+            stability = love.math.random(80, 100) -- Wormhole stability percentage
         }
         
         local wormhole2 = {
@@ -270,7 +436,8 @@ function createCosmicObjects()
             pairY = y1,
             rotation = math.pi, -- Start rotated relative to pair
             rotationSpeed = love.math.random(0.02, 0.05),
-            cooldown = 0
+            cooldown = 0,
+            stability = wormhole1.stability
         }
         
         local shape1 = love.physics.newCircleShape(wormhole1.radius)
@@ -302,7 +469,8 @@ function createCosmicObjects()
                 love.math.random(0.05, 0.2)
             },
             pulse = love.math.random(),
-            pulseSpeed = love.math.random(0.01, 0.03)
+            pulseSpeed = love.math.random(0.01, 0.03),
+            fuelBonus = love.math.random(5, 15) -- Fuel recharge when flying through
         }
         
         table.insert(nebulae, nebula)
@@ -324,7 +492,9 @@ function createAdvancedCosmicObjects()
             tailLength = love.math.random(20, 40),
             speed = love.math.random(500, 1500),
             angle = love.math.random() * math.pi * 2,
-            color = {love.math.random(0.7, 1), love.math.random(0.7, 1), love.math.random(0.7, 1)}
+            color = {love.math.random(0.7, 1), love.math.random(0.7, 1), love.math.random(0.7, 1)},
+            damage = 10,
+            iceContent = love.math.random(50, 100) -- Can be mined for fuel
         }
         
         local shape = love.physics.newCircleShape(comet.radius)
@@ -354,7 +524,9 @@ function createAdvancedCosmicObjects()
             pulsePhase = love.math.random() * math.pi * 2,
             beamAngle = 0,
             beamSpeed = love.math.random(0.05, 0.15),
-            active = true
+            active = true,
+            radiationDamage = 5,
+            scanJamRadius = love.math.random(2000, 5000)
         }
         
         local shape = love.physics.newCircleShape(pulsar.radius)
@@ -383,7 +555,9 @@ function createAdvancedCosmicObjects()
                 angle1 = love.math.random() * math.pi * 2,
                 angle2 = love.math.random() * math.pi * 2,
                 length = love.math.random(5000, 15000)
-            }
+            },
+            jetDamage = 20,
+            energyOutput = love.math.random(50, 100) -- Can recharge ship systems
         }
         
         local shape = love.physics.newCircleShape(quasar.radius)
@@ -412,7 +586,9 @@ function createAdvancedCosmicObjects()
                 love.math.random(0.4, 0.8),
                 love.math.random(0.1, 0.4),
                 0.3
-            }
+            },
+            shockwaveDamage = 15,
+            remnantBonus = love.math.random(20, 50) -- Resources from studying remnants
         }
         
         table.insert(supernovae, supernova)
@@ -483,7 +659,9 @@ function createPlanet(x, y, radius, gravityRadius, gravityStrength, name, color)
         gravityStrength = gravityStrength,
         name = name,
         visited = false,
-        color = color or {0.5, 0.5, 0.5} -- Default gray if no color provided
+        color = color or {0.5, 0.5, 0.5}, -- Default gray if no color provided
+        resources = love.math.random(50, 200), -- Resources available for mining
+        canLand = name ~= "SUN" and name ~= "Jupiter" -- Gas giants can't be landed on
     }
 end
 
@@ -531,7 +709,9 @@ function createAsteroidObj(x, y, size)
         fixture = fixture,
         w = size * 2,
         h = size * 2,
-        size = size * 2
+        size = size * 2,
+        damage = 5,
+        mineralContent = love.math.random(1, 10) -- Can be mined for resources
     }
 end
 
@@ -627,6 +807,15 @@ function updateGravity(dt)
             applyBodyGravity(body, qx, qy, quasar.gravityRadius, quasar.gravityStrength, dt)
         end
     end
+    
+    -- Apply magnetar magnetic forces
+    for _, magnetar in ipairs(magnetars) do
+        local mx, my = magnetar.body:getPosition()
+        
+        if PlayerX[1] then
+            applyMagnetarEffects(PlayerX[1], mx, my, magnetar, dt)
+        end
+    end
 end
 
 function applyBodyGravity(body, px, py, gravityRadius, gravityStrength, dt)
@@ -652,6 +841,26 @@ function applyBodyRepulsion(body, px, py, repulsionRadius, repulsionStrength, dt
         -- Repulsive force
         local force = repulsionStrength / (distance * distance)
         body:applyForce(dirX * force, dirY * force)
+    end
+end
+
+function applyMagnetarEffects(player, mx, my, magnetar, dt)
+    local px, py = player.body:getPosition()
+    local dx, dy = px - mx, py - my
+    local distance = math.sqrt(dx * dx + dy * dy)
+    
+    if distance < magnetar.magneticRadius then
+        -- Magnetic force (attractive/repulsive based on orientation)
+        local force = magnetar.magneticStrength / (distance * distance)
+        player.body:applyForce(dx/distance * force, dy/distance * force)
+        
+        -- Disrupt systems if too close
+        if distance < magnetar.magneticRadius * 0.3 then
+            shipSystems.energy = math.max(0, shipSystems.energy - 5 * dt)
+            if shipSystems.energy <= 0 then
+                shipSystems.shields = math.max(0, shipSystems.shields - 10 * dt)
+            end
+        end
     end
 end
 
@@ -714,8 +923,45 @@ function updateCosmicObjects(dt)
         end
     end
     
+    -- Update magnetars
+    for _, magnetar in ipairs(magnetars) do
+        magnetar.pulse = magnetar.pulse + magnetar.pulseSpeed
+        magnetar.flareTimer = magnetar.flareTimer + dt
+        if magnetar.flareTimer > 10 then -- Flare every 10 seconds
+            magnetar.flareTimer = 0
+            createMagnetarFlare(magnetar)
+        end
+    end
+    
+    -- Update space stations
+    for _, station in ipairs(spacestations) do
+        station.rotation = station.rotation + station.rotationSpeed
+    end
+    
     -- Check wormhole teleportation
     checkWormholeTeleport()
+    
+    -- Check cosmic object interactions
+    checkCosmicObjectInteractions(dt)
+    
+    -- Check landing/docking conditions
+    checkLandingConditions(dt)
+end
+
+function createMagnetarFlare(magnetar)
+    local x, y = magnetar.body:getPosition()
+    for i = 1, 20 do
+        local angle = magnetar.flareAngle + love.math.random(-0.5, 0.5)
+        local speed = love.math.random(200, 500)
+        table.insert(particles, {
+            x = x, y = y,
+            vx = math.cos(angle) * speed,
+            vy = math.sin(angle) * speed,
+            life = love.math.random(40, 80),
+            color = {0.9, 0.1, 0.1, 1}, -- Red flare particles
+            size = love.math.random(2, 5)
+        })
+    end
 end
 
 function updateComet(comet, dt)
@@ -746,39 +992,344 @@ end
 
 function checkWormholeTeleport()
     if not PlayerX[1] then return end
-    
     local player = PlayerX[1]
     local px, py = player.body:getPosition()
-    
+
     for _, wormhole in ipairs(wormholes) do
         if wormhole.cooldown <= 0 then
             local wx, wy = wormhole.body:getPosition()
             local dx, dy = px - wx, py - wy
             local distance = math.sqrt(dx * dx + dy * dy)
-            
+
             if distance < wormhole.radius then
-                -- Teleport player to paired wormhole
+                -- Teleport player to paired wormhole safely
+                player.body:setLinearVelocity(0, 0)
+                player.body:setAngularVelocity(0)
                 player.body:setPosition(wormhole.pairX, wormhole.pairY)
-                
-                -- Set cooldown on both wormholes
+
+                wormhole.cooldown = 5
                 for _, wh in ipairs(wormholes) do
-                    if wh.body:getX() == wormhole.pairX and wh.body:getY() == wormhole.pairY then
-                        wh.cooldown = 5 -- 5 second cooldown
+                    if math.abs(wh.body:getX() - wormhole.pairX) < 1 and math.abs(wh.body:getY() - wormhole.pairY) < 1 then
+                        wh.cooldown = 5
                     end
                 end
-                wormhole.cooldown = 5
-                
-                -- Create teleport effect
+
                 createTeleportEffect(wx, wy)
                 createTeleportEffect(wormhole.pairX, wormhole.pairY)
-                
-                -- Score for using wormhole
                 game.score = game.score + 50
                 createFloatingText(wormhole.pairX, wormhole.pairY - 100, "Wormhole Travel! +50")
                 break
             end
         end
     end
+end
+
+
+function checkCosmicObjectInteractions(dt)
+    if not PlayerX[1] or shipSystems.landed or shipSystems.docked then return end
+    
+    local player = PlayerX[1]
+    local px, py = player.body:getPosition()
+    
+    -- Check black hole damage
+    for _, blackhole in ipairs(blackholes) do
+        local bx, by = blackhole.body:getPosition()
+        local dx, dy = px - bx, py - by
+        local distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance < blackhole.damageRadius then
+            local damage = blackhole.damagePerSecond * dt
+            applyDamage(damage, "Black Hole Radiation")
+            
+            -- Visual effect
+            if love.math.random() < 0.3 then
+                createDamageEffect(px, py, {1, 0, 0})
+            end
+        end
+    end
+    
+    -- Check white hole energy recharge
+    for _, whitehole in ipairs(whiteholes) do
+        local wx, wy = whitehole.body:getPosition()
+        local dx, dy = px - wx, py - wy
+        local distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance < whitehole.energyRadius then
+            shipSystems.energy = math.min(shipSystems.maxEnergy, 
+                shipSystems.energy + whitehole.energyRecharge * dt)
+        end
+    end
+    
+    -- Check pulsar radiation
+    for _, pulsar in ipairs(pulsars) do
+        if pulsar.active then
+            local pxr, pyr = pulsar.body:getPosition()
+            local dx, dy = px - pxr, py - pyr
+            local distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < pulsar.pulseRadius then
+                local pulse = 0.5 + 0.5 * math.sin(pulsar.pulsePhase)
+                if pulse > 0.8 then -- Only damage during pulse peak
+                    local damage = pulsar.radiationDamage * dt
+                    applyDamage(damage, "Pulsar Radiation")
+                end
+            end
+        end
+    end
+    
+    -- Check quasar jet damage
+    for _, quasar in ipairs(quasars) do
+        local qx, qy = quasar.body:getPosition()
+        
+        -- Check both jets
+        for _, jetAngle in ipairs({quasar.jets.angle1, quasar.jets.angle2}) do
+            local jetX = qx + math.cos(jetAngle) * quasar.jets.length
+            local jetY = qy + math.sin(jetAngle) * quasar.jets.length
+            
+            -- Simple line segment distance check
+            local t = ((px - qx) * (jetX - qx) + (py - qy) * (jetY - qy)) / 
+                     ((jetX - qx)^2 + (jetY - qy)^2)
+            t = math.max(0, math.min(1, t))
+            
+            local projX = qx + t * (jetX - qx)
+            local projY = qy + t * (jetY - qy)
+            
+            local distance = math.sqrt((px - projX)^2 + (py - projY)^2)
+            
+            if distance < 200 then -- Jet width
+                local damage = quasar.jetDamage * dt
+                applyDamage(damage, "Quasar Jet")
+            end
+        end
+    end
+    
+    -- Check supernova shockwave
+    for _, supernova in ipairs(supernovae) do
+        if supernova.active then
+            local dx, dy = px - supernova.x, py - supernova.y
+            local distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < supernova.radius * supernova.expansion then
+                local damage = supernova.shockwaveDamage * dt
+                applyDamage(damage, "Supernova Shockwave")
+            end
+        end
+    end
+    
+    -- Check nebula fuel bonus
+    for _, nebula in ipairs(nebulae) do
+        local dx, dy = px - nebula.x, py - nebula.y
+        local distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance < nebula.radius then
+            shipSystems.fuel = math.min(shipSystems.maxFuel, 
+                shipSystems.fuel + nebula.fuelBonus * dt)
+        end
+    end
+    
+    -- Check comet collisions and mining
+    for _, comet in ipairs(comets) do
+        local cx, cy = comet.body:getPosition()
+        local dx, dy = px - cx, py - cy
+        local distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance < comet.radius + 30 then -- Player collision radius
+            if shipSystems.shields > 0 then
+                applyDamage(comet.damage, "Comet Impact")
+            else
+                applyDamage(comet.damage * 2, "Comet Impact")
+            end
+            
+            -- Mining opportunity
+            if love.math.random() < 0.1 then
+                local mined = math.min(comet.iceContent, 5)
+                comet.iceContent = comet.iceContent - mined
+                shipSystems.fuel = math.min(shipSystems.maxFuel, shipSystems.fuel + mined)
+                createFloatingText(px, py - 50, "+" .. mined .. " Fuel")
+            end
+        end
+    end
+    
+    -- Check asteroid collisions
+    for _, asteroid in ipairs(box_i) do
+        if asteroid.type == "asteroid" then
+            local ax, ay = asteroid.body:getPosition()
+            local dx, dy = px - ax, py - ay
+            local distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < asteroid.size + 30 then -- Player collision radius
+                if shipSystems.shields > 0 then
+                    applyDamage(asteroid.damage, "Asteroid Impact")
+                else
+                    applyDamage(asteroid.damage * 2, "Asteroid Impact")
+                end
+                
+                -- Mining opportunity
+                if love.math.random() < 0.05 then
+                    local mined = math.min(asteroid.mineralContent, 2)
+                    asteroid.mineralContent = asteroid.mineralContent - mined
+                    game.score = game.score + mined * 10
+                    createFloatingText(px, py - 50, "+" .. (mined * 10) .. " Resources")
+                end
+            end
+        end
+    end
+end
+
+function applyDamage(amount, source)
+    if shipSystems.shields > 0 then
+        shipSystems.shields = math.max(0, shipSystems.shields - amount)
+        if shipSystems.shields <= 0 then
+            setGameMessage("Shields depleted!", 3)
+        end
+    else
+        shipSystems.health = math.max(0, shipSystems.health - amount)
+        if shipSystems.health <= 0 then
+            game.state = "gameover"
+            setGameMessage("Ship destroyed! Game Over", 10)
+        end
+    end
+end
+
+function createDamageEffect(x, y, color)
+    for i = 1, 10 do
+        local angle = love.math.random() * math.pi * 2
+        local speed = love.math.random(10, 30)
+        table.insert(particles, {
+            x = x, y = y,
+            vx = math.cos(angle) * speed,
+            vy = math.sin(angle) * speed,
+            life = love.math.random(20, 40),
+            color = color or {1, 0, 0, 1},
+            size = love.math.random(1, 3)
+        })
+    end
+end
+
+function checkLandingConditions(dt)
+    if not PlayerX[1] then return end
+    
+    local player = PlayerX[1]
+    local px, py = player.body:getPosition()
+    local vx, vy = player.body:getLinearVelocity()
+    local speed = math.sqrt(vx*vx + vy*vy)
+    
+    -- Check planet landing
+    for _, planet in ipairs(planets) do
+        if planet.canLand then
+            local plx, ply = planet.body:getPosition()
+            local dx, dy = px - plx, py - ply
+            local distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < planet.landingRadius then
+                if speed < 50 and not shipSystems.landed then -- Safe landing speed
+                    if love.keyboard.isDown("l") or isTouchButtonActive("land") then
+                        landOnPlanet(planet)
+                        break
+                    elseif shipSystems.autoDock then
+                        landOnPlanet(planet)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Check space station docking
+    for _, station in ipairs(spacestations) do
+        local sx, sy = station.body:getPosition()
+        local dx, dy = px - sx, py - sy
+        local distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance < station.dockingRadius then
+            if speed < 30 and not shipSystems.docked then -- Safe docking speed
+                if love.keyboard.isDown("l") or isTouchButtonActive("land") then
+                    dockAtStation(station)
+                    break
+                elseif shipSystems.autoDock then
+                    dockAtStation(station)
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Check takeoff conditions
+    if shipSystems.landed or shipSystems.docked then
+        if love.keyboard.isDown("l") or isTouchButtonActive("land") then
+            takeOff()
+        end
+    end
+end
+
+function landOnPlanet(planet)
+    shipSystems.landed = true
+    shipSystems.landingPlanet = planet
+    game.state = "landed"
+    
+    -- Stop player movement
+    PlayerX[1].body:setLinearVelocity(0, 0)
+    PlayerX[1].body:setAngularVelocity(0)
+    
+    -- Position player on planet surface
+    local plx, ply = planet.body:getPosition()
+    local dx, dy = PlayerX[1].body:getPosition()
+    local angle = math.atan2(dy - ply, dx - plx)
+    
+    PlayerX[1].body:setPosition(
+        plx + math.cos(angle) * (planet.radius + 20),
+        ply + math.sin(angle) * (planet.radius + 20)
+    )
+    PlayerX[1].body:setAngle(angle + math.pi/2) -- Orient upright on surface
+    
+    setGameMessage("Landed on " .. planet.name, 3)
+    
+    -- Recharge systems while landed
+    shipSystems.fuel = shipSystems.maxFuel
+    shipSystems.energy = shipSystems.maxEnergy
+    shipSystems.shields = shipSystems.maxShields
+    if shipSystems.health < shipSystems.maxHealth then
+        shipSystems.health = math.min(shipSystems.maxHealth, shipSystems.health + 10)
+    end
+end
+
+function dockAtStation(station)
+    shipSystems.docked = true
+    shipSystems.dockingStation = station
+    game.state = "landed"
+    
+    -- Stop player movement
+    PlayerX[1].body:setLinearVelocity(0, 0)
+    PlayerX[1].body:setAngularVelocity(0)
+    
+    -- Position player at station
+    local sx, sy = station.body:getPosition()
+    PlayerX[1].body:setPosition(sx, sy - station.radius - 50)
+    PlayerX[1].body:setAngle(0)
+    
+    setGameMessage("Docked at Space Station", 3)
+    
+    -- Full recharge and repair at station
+    shipSystems.fuel = shipSystems.maxFuel
+    shipSystems.energy = shipSystems.maxEnergy
+    shipSystems.shields = shipSystems.maxShields
+    shipSystems.health = shipSystems.maxHealth
+    game.score = game.score + 100
+end
+
+function takeOff()
+    shipSystems.landed = false
+    shipSystems.docked = false
+    shipSystems.landingPlanet = nil
+    shipSystems.dockingStation = nil
+    game.state = "playing"
+    
+    setGameMessage("Launching...", 2)
+end
+
+function setGameMessage(text, duration)
+    game.message = text
+    game.messageTimer = duration or 3
 end
 
 function createTeleportEffect(x, y)
@@ -790,7 +1341,8 @@ function createTeleportEffect(x, y)
             vx = math.cos(angle) * speed,
             vy = math.sin(angle) * speed,
             life = love.math.random(30, 60),
-            color = {0.7, 0.3, 0.9, 1} -- Purple particles
+            color = {0.7, 0.3, 0.9, 1}, -- Purple particles
+            size = love.math.random(1, 3)
         })
     end
 end
@@ -876,12 +1428,20 @@ function updateParticles(dt)
 end
 
 function love.update(dt)
-    if game.state ~= "playing" then return end
+    if game.state ~= "playing" and game.state ~= "landed" then return end
+    
+    -- Update message timer
+    if game.messageTimer > 0 then
+        game.messageTimer = game.messageTimer - dt
+        if game.messageTimer <= 0 then
+            game.message = ""
+        end
+    end
     
     world:update(dt)
     updatePlanetOrbits(dt) -- Update planet positions
     updateGravity(dt) -- Apply planetary gravity
-    updateCosmicObjects(dt) -- Update black holes, white holes, wormholes
+    updateCosmicObjects(dt) -- Update cosmic objects and interactions
     updatePlayer(dt)
     updateEnemies(dt)
     updateParticles(dt)
@@ -890,12 +1450,34 @@ function love.update(dt)
     
     -- Handle touch controls
     updateTouchControls(dt)
-	
-	if love.keyboard.isDown("=") or love.keyboard.isDown("+") then
+    
+    -- Update ship systems
+    updateShipSystems(dt)
+    
+    if love.keyboard.isDown("=") or love.keyboard.isDown("+") then
         camera.scale = math.min(camera.scale + 0.01, 5)
     elseif love.keyboard.isDown("-") or love.keyboard.isDown("_")  then
         camera.scale = math.max(camera.scale - 0.01, 0.001)
-	end
+    end
+end
+
+function updateShipSystems(dt)
+    -- Energy regeneration
+    if not shipSystems.boostActive then
+        shipSystems.energy = math.min(shipSystems.maxEnergy, shipSystems.energy + 5 * dt)
+    end
+    
+    -- Shield regeneration (when not taking damage)
+    shipSystems.shields = math.min(shipSystems.maxShields, shipSystems.shields + 2 * dt)
+    
+    -- Recharge and repair while landed/docked
+    if shipSystems.landed or shipSystems.docked then
+        shipSystems.fuel = shipSystems.maxFuel
+        shipSystems.energy = shipSystems.maxEnergy
+        if shipSystems.health < shipSystems.maxHealth then
+            shipSystems.health = math.min(shipSystems.maxHealth, shipSystems.health + 10 * dt)
+        end
+    end
 end
 
 function updateTouchButtonPositions()
@@ -917,6 +1499,12 @@ function updateTouchButtonPositions()
             button.x, button.y = w - 100, 100
         elseif button.id == "zoom_out" then
             button.x, button.y = w - 100, 180
+        elseif button.id == "boost" then
+            button.x, button.y = w - 100, 260
+        elseif button.id == "brake" then
+            button.x, button.y = w - 100, 340
+        elseif button.id == "land" then
+            button.x, button.y = 300, h - 100
         end
     end
 end
@@ -924,7 +1512,6 @@ end
 function love.resize(w, h)
     updateTouchButtonPositions()
 end
-
 
 function updateTouchControls(dt)
     -- Reset button states
@@ -958,6 +1545,14 @@ function updateTouchControls(dt)
     end
 end
 
+function isTouchButtonActive(buttonId)
+    for _, button in ipairs(touchControls.buttons) do
+        if button.id == buttonId and button.active then
+            return true
+        end
+    end
+    return false
+end
 
 function handleTouchInput(buttonId)
     if not PlayerX[1] then return end
@@ -966,25 +1561,56 @@ function handleTouchInput(buttonId)
     local body = player.body
     local bx, by = body:getWorldPoint(0, player.h / 2)
     local angle = body:getAngle()
+	local speed = 120
     
     if buttonId == "up" then
-        body:applyForce(0, -20)
-        createPlayerParticle(bx, by, angle)
+        if shipSystems.fuel > 0 then
+            body:applyForce(0, -speed)
+            createPlayerParticle(bx, by, angle)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
+        end
     elseif buttonId == "down" then
-        body:applyForce(0, 20)
-        createPlayerParticle(bx, by, angle + math.pi)
+        if shipSystems.fuel > 0 then
+            body:applyForce(0, speed)
+            createPlayerParticle(bx, by, angle + math.pi)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
+        end
     elseif buttonId == "left" then
-        body:applyForce(-20, 0)
+        if shipSystems.fuel > 0 then
+            body:applyForce(-speed, 0)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.05)
+        end
     elseif buttonId == "right" then
-        body:applyForce(20, 0)
+        if shipSystems.fuel > 0 then
+            body:applyForce(speed, 0)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.05)
+        end
     elseif buttonId == "rotate_left" then
-        body:applyTorque(-35)
+        body:applyTorque(-speed)
     elseif buttonId == "rotate_right" then
-        body:applyTorque(35)
+        body:applyTorque(speed)
     elseif buttonId == "zoom_in" then
         camera.scale = math.min(camera.scale + 0.01, camera.maxScale)
     elseif buttonId == "zoom_out" then
         camera.scale = math.max(camera.scale - 0.01, camera.minScale)
+    elseif buttonId == "boost" then
+        if shipSystems.energy > 0 then
+            shipSystems.boostActive = true
+            local boostForce = 100
+            body:applyForce(0, -boostForce)
+            createPlayerParticle(bx, by, angle, true)
+            shipSystems.energy = math.max(0, shipSystems.energy - 10)
+        end
+    elseif buttonId == "brake" then
+        if shipSystems.energy > 0 then
+            shipSystems.brakesActive = true
+            local vx, vy = body:getLinearVelocity()
+            local brakeForce = 50
+            body:applyForce(-vx * brakeForce, -vy * brakeForce)
+            shipSystems.energy = math.max(0, shipSystems.energy - 5)
+        end
+    elseif buttonId == "land" then
+        -- Landing/takeoff handled in checkLandingConditions
     end
 end
 
@@ -1008,6 +1634,9 @@ function love.draw()
     drawQuasars()
     drawPulsars()
     drawComets()
+    drawMagnetars()
+    drawAsteroidFields()
+    drawSpaceStations()
     drawWormholes()
     drawWhiteholes()
     drawBlackholes()
@@ -1039,6 +1668,67 @@ function love.draw()
     -- Draw touch controls
     if touchControls.visible then
         drawTouchControls()
+    end
+end
+
+function drawMagnetars()
+    for _, magnetar in ipairs(magnetars) do
+        local x, y = magnetar.body:getPosition()
+        local pulse = 0.7 + 0.3 * math.sin(magnetar.pulse)
+        
+        -- Magnetic field
+        love.graphics.setColor(0.9, 0.1, 0.1, 0.1 * pulse)
+        love.graphics.circle("fill", x, y, magnetar.magneticRadius)
+        
+        -- Magnetar body
+        love.graphics.setColor(0.9, 0.2, 0.2, 0.9 * pulse)
+        love.graphics.circle("fill", x, y, magnetar.radius)
+        
+        -- Pulsing core
+        love.graphics.setColor(1, 1, 1, pulse)
+        love.graphics.circle("fill", x, y, magnetar.radius * 0.5)
+        
+        -- Label
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.print("MAGNETAR", x - 35, y - magnetar.radius - 30)
+    end
+end
+
+function drawAsteroidFields()
+    for _, field in ipairs(asteroidfields) do
+        -- Field boundary (debug)
+        if game.debugMode then
+            love.graphics.setColor(0.5, 0.5, 0, 0.1)
+            love.graphics.circle("fill", field.x, field.y, field.radius)
+        end
+    end
+end
+
+function drawSpaceStations()
+    for _, station in ipairs(spacestations) do
+        local x, y = station.body:getPosition()
+        
+        -- Station structure
+        love.graphics.setColor(0.7, 0.7, 0.8)
+        love.graphics.circle("fill", x, y, station.radius)
+        
+        -- Rotating ring
+        love.graphics.setColor(0.5, 0.5, 0.7)
+        love.graphics.arc("line", x, y, station.radius * 1.2, station.rotation, station.rotation + math.pi * 1.5, 20)
+        
+        -- Docking area
+        love.graphics.setColor(0, 1, 0, 0.3)
+        love.graphics.circle("line", x, y, station.dockingRadius)
+        
+        -- Label
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.print("SPACE STATION", x - 50, y - station.radius - 30)
+        
+        -- Docking instructions
+        if shipSystems.docked and station == shipSystems.dockingStation then
+            love.graphics.setColor(0, 1, 0, 0.8)
+            love.graphics.print("DOCKED - Press L to launch", x - 80, y + station.radius + 10)
+        end
     end
 end
 
@@ -1158,6 +1848,12 @@ function drawComets()
         -- Bright core
         love.graphics.setColor(1, 1, 1, 0.8)
         love.graphics.circle("fill", x, y, comet.radius * 0.5)
+        
+        -- Ice content indicator
+        if game.debugMode then
+            love.graphics.setColor(1, 1, 1, 0.7)
+            love.graphics.print("Ice: " .. comet.iceContent, x - 20, y + comet.radius + 10)
+        end
     end
 end
 
@@ -1184,6 +1880,8 @@ function drawBlackholes()
         if game.debugMode and debugInfo.showGravityZones then
             love.graphics.setColor(1, 0, 0, 0.1)
             love.graphics.circle("fill", x, y, blackhole.gravityRadius)
+            love.graphics.setColor(1, 0, 0, 0.3)
+            love.graphics.circle("line", x, y, blackhole.damageRadius)
         end
         
         -- Label
@@ -1212,6 +1910,8 @@ function drawWhiteholes()
         if game.debugMode and debugInfo.showGravityZones then
             love.graphics.setColor(0, 1, 1, 0.1)
             love.graphics.circle("fill", x, y, whitehole.repulsionRadius)
+            love.graphics.setColor(0, 1, 1, 0.3)
+            love.graphics.circle("line", x, y, whitehole.energyRadius)
         end
         
         -- Label
@@ -1243,6 +1943,12 @@ function drawWormholes()
         else
             love.graphics.setColor(0, 1, 0, 0.7)
             love.graphics.print("ACTIVE", x - 20, y + wormhole.radius + 10)
+        end
+        
+        -- Stability indicator
+        if game.debugMode then
+            love.graphics.setColor(1, 1, 1, 0.7)
+            love.graphics.print("Stability: " .. wormhole.stability .. "%", x - 40, y + wormhole.radius + 30)
         end
         
         -- Label
@@ -1283,10 +1989,22 @@ function drawPlanets()
         love.graphics.circle("line", x, y, planet.radius)
         love.graphics.setLineWidth(1)
         
+        -- Landing zone
+        if planet.canLand then
+            love.graphics.setColor(0, 1, 0, 0.2)
+            love.graphics.circle("line", x, y, planet.landingRadius)
+        end
+        
         -- Planet name if visited or debug
         if planet.visited or game.debugMode then
             love.graphics.setColor(1, 1, 1, 0.7)
             love.graphics.print(planet.name, x - love.graphics.getFont():getWidth(planet.name)/2, y - planet.radius - 20)
+        end
+        
+        -- Landing instructions
+        if shipSystems.landed and planet == shipSystems.landingPlanet then
+            love.graphics.setColor(0, 1, 0, 0.8)
+            love.graphics.print("LANDED - Press L to launch", x - 80, y + planet.radius + 10)
         end
     end
 end
@@ -1321,6 +2039,12 @@ function drawAsteroids()
             
             love.graphics.setColor(0.2, 0.2, 0.2)
             love.graphics.polygon("line", asteroid.body:getWorldPoints(asteroid.shape:getPoints()))
+            
+            -- Mineral content indicator (debug)
+            if game.debugMode then
+                love.graphics.setColor(1, 1, 1, 0.7)
+                love.graphics.print("Minerals: " .. asteroid.mineralContent, x - 30, y + asteroid.size + 5)
+            end
         end
     end
 end
@@ -1353,7 +2077,7 @@ function createPlayer()
 end
 
 function updatePlayer(dt)
-    if not PlayerX[1] then return end
+    if not PlayerX[1] or shipSystems.landed or shipSystems.docked then return end
     
     local player = PlayerX[1]
     local body = player.body
@@ -1361,32 +2085,38 @@ function updatePlayer(dt)
     -- Get bottom world coordinates
     local bx, by = body:getWorldPoint(0, player.h / 2)
     local angle = body:getAngle()
+    local speed = 120
     
-    -- Space movement - apply forces in the direction the player is facing
-    if love.keyboard.isDown("right") then
-        body:applyForce(20, 0)
+    -- Reset boost/brake states
+    shipSystems.boostActive = false
+    shipSystems.brakesActive = false
+    
+
+
+    -- Boost system
+    if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+        if shipSystems.energy > 0 then
+            shipSystems.boostActive = true
+            local boostForce = 300
+            body:applyForce(0, -boostForce)
+            createPlayerParticle(bx, by, angle, true)
+            shipSystems.energy = math.max(0, shipSystems.energy - 20 * dt)
+        end
     end
-    
-    if love.keyboard.isDown("left") then
-        body:applyForce(-20, 0)
-    end
-    
-    if love.keyboard.isDown("up") then
-        body:applyForce(0, -20)
-        
-        -- Thruster particles
-        createPlayerParticle(bx, by, angle)
-    end 
-    
-    if love.keyboard.isDown("down") then
-        body:applyForce(0, 20)
-        
-        -- Thruster particles
-        createPlayerParticle(bx, by, angle + math.pi)
+
+    -- Brake system
+    if love.keyboard.isDown("space") then
+        if shipSystems.energy > 0 then
+            shipSystems.brakesActive = true
+            local vx, vy = body:getLinearVelocity()
+            local brakeForce = 100
+            body:applyForce(-vx * brakeForce, -vy * brakeForce)
+            shipSystems.energy = math.max(0, shipSystems.energy - 10 * dt)
+        end
     end
 
     -- Manual rotation in space
-    local rotationForce = 35
+    local rotationForce = speed
     if love.keyboard.isDown("pageup") then
         body:applyTorque(-rotationForce)
     end
@@ -1410,24 +2140,37 @@ function updatePlayerParticles(player, dt)
     end
 end
 
-function createPlayerParticle(x, y, angle)
+function createPlayerParticle(x, y, angle, isBoost)
     local particleAngle = angle + math.pi + love.math.random(-0.3, 0.3)
-    local speed = love.math.random(20, 50)
+    local speed = isBoost and love.math.random(80, 120) or love.math.random(30, 70)
     
     table.insert(PlayerX[1].particles, {
         x = x,
         y = y,
         vx = math.cos(particleAngle) * speed,
         vy = math.sin(particleAngle) * speed,
-        life = love.math.random(20, 40)
+        life = love.math.random(25, 50),
+        isBoost = isBoost or false
     })
 end
 
+
 function drawPlayer(player)
-    love.graphics.setColor(0, 0.8, 1) -- Blue spaceship
     local x, y = player.body:getPosition()
     
-    -- Draw player
+    -- Draw shield if active
+    if shipSystems.shields > 0 then
+        local shieldAlpha = 0.3 + 0.2 * math.sin(love.timer.getTime() * 5)
+        love.graphics.setColor(0, 0.5, 1, shieldAlpha)
+        love.graphics.circle("line", x, y, 40)
+    end
+    
+    -- Draw player ship
+    if shipSystems.boostActive then
+        love.graphics.setColor(1, 0.5, 0) -- Orange during boost
+    else
+        love.graphics.setColor(0, 0.8, 1) -- Blue spaceship
+    end
     love.graphics.polygon("fill", player.body:getWorldPoints(player.shape:getPoints()))
     
     -- Draw particles
@@ -1436,12 +2179,26 @@ function drawPlayer(player)
     -- Draw player indicator
     love.graphics.setColor(0, 1, 0, 0.5)
     love.graphics.print("PLAYER", x - 20, y - 30)
+    
+    -- Draw landing/docking indicator if applicable
+    if shipSystems.landed then
+        love.graphics.setColor(0, 1, 0, 0.8)
+        love.graphics.print("LANDED", x - 25, y - 50)
+    elseif shipSystems.docked then
+        love.graphics.setColor(0, 1, 1, 0.8)
+        love.graphics.print("DOCKED", x - 25, y - 50)
+    end
 end
 
 function drawPlayerParticles(player)
     for _, p in ipairs(player.particles) do
-        love.graphics.setColor(1, 1, 0.5, p.life/40)
-        love.graphics.circle("fill", p.x, p.y, 2)
+        if p.isBoost then
+            love.graphics.setColor(1, 0.5, 0, p.life/40) -- Orange boost particles
+            love.graphics.circle("fill", p.x, p.y, 3)
+        else
+            love.graphics.setColor(1, 1, 0.5, p.life/40) -- Yellow normal particles
+            love.graphics.circle("fill", p.x, p.y, 2)
+        end
     end
 end
 
@@ -1470,6 +2227,12 @@ function drawTouchControls()
             love.graphics.print("+", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
         elseif button.id == "zoom_out" then
             love.graphics.print("-", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
+        elseif button.id == "boost" then
+            love.graphics.print("BST", button.x + button.width/2 - 10, button.y + button.height/2 - 10)
+        elseif button.id == "brake" then
+            love.graphics.print("BRK", button.x + button.width/2 - 10, button.y + button.height/2 - 10)
+        elseif button.id == "land" then
+            love.graphics.print("LAND", button.x + button.width/2 - 15, button.y + button.height/2 - 10)
         end
     end
 end
@@ -1498,11 +2261,11 @@ end
 
 function createEnemyObj(x, y, w, h, angle)
     local body = love.physics.newBody(world, x, y, "dynamic")
-    local shape = love.physics.newRectangleShape(6, 12) -- Smaller enemies
+    local shape = love.physics.newRectangleShape(w, h) -- Smaller enemies
     local fixture = love.physics.newFixture(body, shape, 1.2)
     fixture:setFriction(0.1)
     fixture:setRestitution(0.2)
-    fixture:setSensor(true)
+    -- fixture:setSensor(true)
     
     local enemy = {
         type = "enemy",
@@ -1685,11 +2448,12 @@ function drawParticles()
             love.graphics.print(p.text, p.x, p.y)
         else
             if p.color then
-                love.graphics.setColor(p.color[1], p.color[2], p.color[3], p.life/255)
+                love.graphics.setColor(p.color[1], p.color[2], p.color[3], p.life/(p.size and p.size * 10 or 255))
             else
                 love.graphics.setColor(1, 1, 1, p.life/255)
             end
-            love.graphics.circle("fill", p.x, p.y, 1)
+            local size = p.size or 1
+            love.graphics.circle("fill", p.x, p.y, size)
         end
     end
 end
@@ -1775,12 +2539,23 @@ function drawUI()
     love.graphics.print("Comets: " .. #comets, 10, 230)
     love.graphics.print("Pulsars: " .. #pulsars, 10, 250)
     love.graphics.print("Quasars: " .. #quasars, 10, 270)
+    love.graphics.print("Magnetars: " .. #magnetars, 10, 290)
+    love.graphics.print("Space Stations: " .. #spacestations, 10, 310)
+    
+    -- Ship systems status
+    drawShipSystemsUI()
     
     -- Debug mode indicator
     if game.debugMode then
         love.graphics.setColor(1, 0, 0)
-        love.graphics.print("DEBUG MODE ACTIVE", 10, 290)
+        love.graphics.print("DEBUG MODE ACTIVE", 10, 350)
         love.graphics.setColor(1, 1, 1)
+    end
+    
+    -- Game message
+    if game.message ~= "" then
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.print(game.message, love.graphics.getWidth()/2 - love.graphics.getFont():getWidth(game.message)/2, 50)
     end
     
     -- Instructions
@@ -1791,11 +2566,15 @@ function drawUI()
     
     -- Game controls
     love.graphics.print("Space Controls:", love.graphics.getWidth() - 250, 310)
-    love.graphics.print("Arrow Keys: Thrusters", love.graphics.getWidth() - 250, 210)
-    love.graphics.print("PageUp/Down: Rotate", love.graphics.getWidth() - 250, 230)
-    love.graphics.print("Visit planets for points!", love.graphics.getWidth() - 250, 250)
-    love.graphics.print("Use wormholes for teleport!", love.graphics.getWidth() - 250, 270)
-    love.graphics.print("H: Toggle Controls", love.graphics.getWidth() - 250, 290)
+    love.graphics.print("Arrow Keys: Thrusters", love.graphics.getWidth() - 250, 330)
+    love.graphics.print("PageUp/Down: Rotate", love.graphics.getWidth() - 250, 350)
+    love.graphics.print("Shift: Boost", love.graphics.getWidth() - 250, 370)
+    love.graphics.print("Space: Brake", love.graphics.getWidth() - 250, 390)
+    love.graphics.print("L: Land/Takeoff", love.graphics.getWidth() - 250, 410)
+    love.graphics.print("C: Auto Dock", love.graphics.getWidth() - 250, 430)
+    love.graphics.print("Visit planets for points!", love.graphics.getWidth() - 250, 450)
+    love.graphics.print("Use wormholes for teleport!", love.graphics.getWidth() - 250, 470)
+    love.graphics.print("H: Toggle Controls", love.graphics.getWidth() - 250, 490)
     
     -- Floating text particles
     for _, p in ipairs(particles) do
@@ -1804,6 +2583,65 @@ function drawUI()
             love.graphics.print(p.text, p.x, p.y)
         end
     end
+end
+
+function drawShipSystemsUI()
+    local startY = 400
+    local barWidth = 150
+    local barHeight = 15
+    
+    -- Fuel
+    local fuelPercent = shipSystems.fuel / shipSystems.maxFuel
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("Fuel:", 10, startY)
+    love.graphics.setColor(1, 0.5, 0)
+    love.graphics.rectangle("fill", 60, startY, barWidth * fuelPercent, barHeight)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.rectangle("line", 60, startY, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.fuel, shipSystems.maxFuel), 220, startY)
+    
+    -- Health
+    local healthPercent = shipSystems.health / shipSystems.maxHealth
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("Health:", 10, startY + 25)
+    love.graphics.setColor(1, 0, 0)
+    love.graphics.rectangle("fill", 60, startY + 25, barWidth * healthPercent, barHeight)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.rectangle("line", 60, startY + 25, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.health, shipSystems.maxHealth), 220, startY + 25)
+    
+    -- Shields
+    local shieldPercent = shipSystems.shields / shipSystems.maxShields
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("Shields:", 10, startY + 50)
+    love.graphics.setColor(0, 0.5, 1)
+    love.graphics.rectangle("fill", 60, startY + 50, barWidth * shieldPercent, barHeight)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.rectangle("line", 60, startY + 50, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.shields, shipSystems.maxShields), 220, startY + 50)
+    
+    -- Energy
+    local energyPercent = shipSystems.energy / shipSystems.maxEnergy
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("Energy:", 10, startY + 75)
+    love.graphics.setColor(0, 1, 0)
+    love.graphics.rectangle("fill", 60, startY + 75, barWidth * energyPercent, barHeight)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.rectangle("line", 60, startY + 75, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.energy, shipSystems.maxEnergy), 220, startY + 75)
+    
+    -- System status
+    love.graphics.setColor(1, 1, 1)
+    if shipSystems.landed then
+        love.graphics.print("Status: LANDED on " .. shipSystems.landingPlanet.name, 10, startY + 100)
+    elseif shipSystems.docked then
+        love.graphics.print("Status: DOCKED at Space Station", 10, startY + 100)
+    else
+        love.graphics.print("Status: IN FLIGHT", 10, startY + 100)
+    end
+    
+    -- Auto dock status
+    love.graphics.print("Auto Dock: " .. (shipSystems.autoDock and "ON" or "OFF"), 10, startY + 120)
 end
 
 function drawDebugInfo()
@@ -1859,6 +2697,12 @@ function drawPlayerDebugInfo(player)
             love.graphics.setColor(1, 1, 0, 0.8)
             love.graphics.line(bx, by, bx, by + thrusterLength)
         end
+        
+        -- Boost indicator
+        if shipSystems.boostActive then
+            love.graphics.setColor(1, 0.5, 0, 0.8)
+            love.graphics.line(bx, by, bx, by - thrusterLength * 2)
+        end
     end
     
     -- Angular velocity
@@ -1911,10 +2755,6 @@ function love.keypressed(key)
     elseif key == "f3" then
         camera.mode = "free_move"
         camera.target = nil
-    -- elseif key == "=" or key == "+" then
-        -- camera.scale = math.min(camera.scale + 0.01, 5)
-    -- elseif key == "-" or key == "_" then
-        -- camera.scale = math.max(camera.scale - 0.01, 0.001)
     elseif key == "r" then
         camera.scale = 0.01  -- Reset to solar system zoom level
     elseif key == "f5" then
@@ -1931,6 +2771,12 @@ function love.keypressed(key)
     elseif key == "h" then
         -- Toggle touch controls visibility
         touchControls.visible = not touchControls.visible
+    elseif key == "c" then
+        -- Toggle auto docking computer
+        shipSystems.autoDock = not shipSystems.autoDock
+        setGameMessage("Auto Dock: " .. (shipSystems.autoDock and "ON" or "OFF"), 2)
+    elseif key == "l" then
+        -- Landing/takeoff handled in checkLandingConditions
     end
 end
 
