@@ -1,3 +1,5 @@
+local bit = require("bit")
+
 function love.load()
     -- Game state
     game = {
@@ -34,6 +36,8 @@ function love.load()
     spacestations = {}
     bullets = {} -- NEW: Bullets for shooting
     deadEnemies = {} -- NEW: Store dead enemies
+    tesseracts = {} -- NEW: Tesseracts (4D hypercubes)
+    bionebulae = {} -- NEW: Bio Nebulae
     
     createSolarSystem() -- Create sun and orbiting planets
     createAsteroidBelts() -- Create asteroid belts
@@ -44,13 +48,19 @@ function love.load()
     createSpaceStations() -- Create space stations
     createPlayer()
     createEnemies()
-    -- createBalls()
+    createBalls()
     
     -- NEW: Create supermassive black hole
     createSupermassiveBlackHole()
     
     -- NEW: Create demon planet
     createDemonPlanet()
+    
+    -- NEW: Create tesseract near supermassive black hole
+    createTesseract()
+    
+    -- NEW: Create bio nebulae
+    createBioNebulae()
     
     -- Enhanced Camera setup for massive space exploration
     camera = {
@@ -79,7 +89,8 @@ function love.load()
         "Shift: Boost",
         "Space: Brake",
         "C: Toggle Docking Computer",
-        "F: Fire Weapons" -- NEW: Shooting instruction
+        "F: Fire Weapons", -- NEW: Shooting instruction
+        "F6: Detailed Debug" -- NEW: Detailed debug toggle
     }
     
     -- Debug info
@@ -88,7 +99,9 @@ function love.load()
         showThrusterDirection = true,
         showPhysicsInfo = true,
         showObjectCounts = true,
-        showGravityZones = true
+        showGravityZones = true,
+        showDetailedInfo = false, -- NEW: Detailed debug info
+        totalGravityForce = {x = 0, y = 0, magnitude = 0} -- NEW: Track gravity force on player
     }
     
     -- Player ship systems
@@ -191,6 +204,15 @@ function love.load()
                 height = 50,
                 color = {0.2, 0.5, 1, 0.5},
                 active = false
+            }, 
+			{
+                id = "debug",
+                x = love.graphics.getWidth() - 100,
+                y = 180,
+                width = 50,
+                height = 50,
+                color = {0.2, 0.5, 1, 0.5},
+                active = false
             },
             {
                 id = "boost",
@@ -234,6 +256,706 @@ function love.load()
     updateTouchButtonPositions()
 end
 
+
+
+
+-- NEW: Create tesseract (4D hypercube) - REPLACED
+function createTesseract()
+    -- local supermassiveBlackHole = blackholes[1] -- Assuming first black hole is supermassive
+    -- if not supermassiveBlackHole then return end
+    
+    -- local bhx, bhy = supermassiveBlackHole.body:getPosition()
+    
+    -- Place tesseract near the supermassive black hole
+    local tesseract = {
+        x = 500000, -- Position offset from black hole
+        y = 500000,
+        size = 2000,
+        -- 6 independent rotation angles (planes: XY, XZ, XW, YZ, YW, ZW)
+        rotation4D = {0, 0, 0, 0, 0, 0},
+        rotationSpeed = {0.6, 0.45, 0.35, 0.55, 0.4, 0.5}, -- radians/sec (tuned)
+        pulse = 0,
+        pulseSpeed = 0.05,
+        energyField = {
+            radius = 3000,
+            strength = 50,
+            rechargeRate = 20 -- Energy recharge per second when nearby
+        },
+        anomalyField = {
+            radius = 5000,
+            timeDistortion = 0.5, -- slows down time within field (use in player update if desired)
+            quantumFlux = 0.3 -- chance per second for random teleport
+        },
+        vertices4D = {}, -- Will store 4D vertices
+        vertices = {},   -- projected vertices
+        edges = {},      -- edges (pairs of vertex indices)
+        type = "tesseract",
+        pulse = 0
+    }
+    
+    -- Initialize 4D vertices of a tesseract (-1 or 1 in each of 4 dims)
+    local vertices4D = {}
+    for i = 0, 15 do
+        local x = bit.band(i, 1) ~= 0 and 1 or -1
+        local y = bit.band(i, 2) ~= 0 and 1 or -1
+        local z = bit.band(i, 4) ~= 0 and 1 or -1
+        local w = bit.band(i, 8) ~= 0 and 1 or -1
+        table.insert(vertices4D, {x, y, z, w})
+    end
+    tesseract.vertices4D = vertices4D
+
+    -- Define edges: vertices differ by exactly one coordinate
+    for i = 1, 16 do
+        for j = i + 1, 16 do
+            local diff = 0
+            for dim = 1, 4 do
+                if vertices4D[i][dim] ~= vertices4D[j][dim] then diff = diff + 1 end
+            end
+            if diff == 1 then
+                table.insert(tesseract.edges, {i, j})
+            end
+        end
+    end
+    
+    table.insert(tesseracts, tesseract)
+end
+
+
+-- HELPER: rotate a 4D vector by a given plane angle
+-- plane indices mapping:
+-- 1 = XY, 2 = XZ, 3 = XW, 4 = YZ, 5 = YW, 6 = ZW
+local function rotate4D(x, y, z, w, angles)
+    -- XY rotate (x,y)
+    local a = angles[1]; local cx, sx = math.cos(a), math.sin(a)
+    local nx, ny = cx*x - sx*y, sx*x + cx*y
+    x, y = nx, ny
+    -- XZ rotate (x,z)
+    a = angles[2]; cx, sx = math.cos(a), math.sin(a)
+    nx, nz = cx*x - sx*z, sx*x + cx*z
+    x, z = nx, nz
+    -- XW rotate (x,w)
+    a = angles[3]; cx, sx = math.cos(a), math.sin(a)
+    nx, nw = cx*x - sx*w, sx*x + cx*w
+    x, w = nx, nw
+    -- YZ rotate (y,z)
+    a = angles[4]; cx, sx = math.cos(a), math.sin(a)
+    ny, nz = cx*y - sx*z, sx*y + cx*z
+    y, z = ny, nz
+    -- YW rotate (y,w)
+    a = angles[5]; cx, sx = math.cos(a), math.sin(a)
+    ny, nw = cx*y - sx*w, sx*y + cx*w
+    y, w = ny, nw
+    -- ZW rotate (z,w)
+    a = angles[6]; cx, sx = math.cos(a), math.sin(a)
+    nz, nw = cx*z - sx*w, sx*z + cx*w
+    z, w = nz, nw
+
+    return x, y, z, w
+end
+
+
+-- NEW: Create bio nebulae
+function createBioNebulae()
+    for i = 1, 3 do
+        local angle = love.math.random() * math.pi * 2
+        local distance = love.math.random(80000, 150000)
+        local x = math.cos(angle) * distance
+        local y = math.sin(angle) * distance
+        
+        local bioNebula = {
+            x = x, y = y,
+            radius = love.math.random(6000, 12000),
+            healthRegen = love.math.random(5, 15), -- Health regeneration per second
+            fuelConsumption = love.math.random(3, 8), -- Fuel consumption per second
+            pulse = love.math.random(),
+            pulseSpeed = love.math.random(0.02, 0.05),
+            sporeDrones = {},
+            sporeSpawnTimer = 0,
+            sporeSpawnInterval = love.math.random(5, 15),
+            color = {
+                love.math.random(0.1, 0.4),  -- R (low for green/blue dominance)
+                love.math.random(0.6, 0.9),  -- G (high for organic green)
+                love.math.random(0.3, 0.7),  -- B 
+                love.math.random(0.1, 0.3)   -- A
+            },
+            cellPattern = {},
+            type = "bio_nebula"
+        }
+        
+        -- Generate organic cell pattern
+        for j = 1, 20 do
+            local cellAngle = love.math.random() * math.pi * 2
+            local cellDist = love.math.random(0, bioNebula.radius * 0.8)
+            table.insert(bioNebula.cellPattern, {
+                x = math.cos(cellAngle) * cellDist,
+                y = math.sin(cellAngle) * cellDist,
+                size = love.math.random(20, 80),
+                pulseOffset = love.math.random() * math.pi * 2,
+                pulseSpeed = love.math.random(0.1, 0.3)
+            })
+        end
+        
+        table.insert(bionebulae, bioNebula)
+    end
+end
+
+-- NEW: Create spore drone
+function createSporeDrone(x, y, bioNebula)
+    local body = love.physics.newBody(world, x, y, "dynamic")
+    local shape = love.physics.newCircleShape(15)
+    local fixture = love.physics.newFixture(body, shape, 0.3)
+    fixture:setSensor(true)
+    
+    local drone = {
+        body = body,
+        shape = shape,
+        bioNebula = bioNebula,
+        life = love.math.random(300, 600), -- frames
+        maxLife = 600,
+        pulse = 0,
+        pulseSpeed = love.math.random(0.1, 0.2),
+        movementTimer = 0,
+        movementChange = love.math.random(2, 5),
+        damage = 2,
+        health = 10
+    }
+    
+    -- Give random initial velocity
+    local angle = love.math.random() * math.pi * 2
+    local speed = love.math.random(50, 150)
+    body:setLinearVelocity(math.cos(angle) * speed, math.sin(angle) * speed)
+    
+    table.insert(bioNebula.sporeDrones, drone)
+    return drone
+end
+
+-- REPLACED: Update tesseracts (call from updateCosmicObjects or love.update)
+function updateTesseracts(dt)
+    for _, t in ipairs(tesseracts) do
+        -- advance rotation angles
+        for i = 1, 6 do
+            t.rotation4D[i] = (t.rotation4D[i] + (t.rotationSpeed[i] or 0) * dt) % (math.pi * 2)
+        end
+
+        -- pulse
+        t.pulse = (t.pulse + t.pulseSpeed * dt) % (math.pi * 2)
+
+        -- project 4D vertices to 3D then 2D
+        t.vertices = {}
+        local perspective = 2.5 -- safer perspective factor
+        for idx, v4 in ipairs(t.vertices4D) do
+            local x, y, z, w = v4[1], v4[2], v4[3], v4[4]
+            -- apply full 6-plane rotation
+            x, y, z, w = rotate4D(x, y, z, w, t.rotation4D)
+
+            -- small scaling so the hypercube isn't too huge
+            local scale = 0.9
+
+            -- project 4D -> 3D by perspective on w
+            local denom = perspective - (w * 0.6) -- reduce impact of w
+            if math.abs(denom) < 0.0001 then denom = 0.0001 * (denom >= 0 and 1 or -1) end
+            local px3 = (x * scale) / denom
+            local py3 = (y * scale) / denom
+            local pz3 = (z * scale) / denom
+
+            -- map 3D to world 2D (ignore true 3D camera; use pz3 for depth sort)
+            local worldX = t.x + px3 * t.size
+            local worldY = t.y + py3 * t.size
+
+            table.insert(t.vertices, {
+                x = worldX,
+                y = worldY,
+                z = pz3,
+                original4D = {v4[1], v4[2], v4[3], v4[4]}
+            })
+        end
+
+        -- player interactions
+        if PlayerX[1] then
+            local player = PlayerX[1]
+            local px, py = player.body:getPosition()
+            local dx, dy = px - t.x, py - t.y
+            local distance = math.sqrt(dx*dx + dy*dy)
+
+            -- energy field
+            if distance < t.energyField.radius then
+                local recharge = (t.energyField.strength * dt)
+                shipSystems.energy = math.min(shipSystems.maxEnergy, shipSystems.energy + recharge)
+                if love.math.random() < 0.12 then
+                    createTesseractEnergyParticle(t.x + love.math.random(-t.size, t.size),
+                                                  t.y + love.math.random(-t.size, t.size),
+                                                  {0.7,0.3,1,1})
+                end
+            end
+
+            -- anomaly field effects (frame-rate stable quantum flux)
+            if distance < t.anomalyField.radius then
+                -- small message occasionally
+                if love.math.random() < 0.01 then setGameMessage("TIME DISTORTION", 1.5) end
+
+                -- quantum flux: probability this frame = 1 - exp(-rate * dt)
+                local rate = t.anomalyField.quantumFlux or 0.0
+                local prob = 1 - math.exp(-rate * dt)
+                if love.math.random() < prob then
+                    -- teleport somewhere within anomaly radius (but biased outward)
+                    local a = love.math.random() * 2 * math.pi
+                    local r = love.math.random(t.size * 0.2, t.anomalyField.radius * 0.9)
+                    local newX = t.x + math.cos(a) * r
+                    local newY = t.y + math.sin(a) * r
+
+                    player.body:setPosition(newX, newY)
+                    player.body:setLinearVelocity(0, 0)
+                    player.body:setAngularVelocity(0)
+
+                    createTeleportEffect(px, py)
+                    createTeleportEffect(newX, newY)
+                    setGameMessage("QUANTUM FLUX TELEPORT!", 2.5)
+                end
+            end
+        end
+    end
+end
+
+
+-- NEW: Update bio nebulae
+function updateBioNebulae(dt)
+    for _, bioNebula in ipairs(bionebulae) do
+        -- Update pulse
+        bioNebula.pulse = bioNebula.pulse + bioNebula.pulseSpeed * dt
+        if bioNebula.pulse > math.pi * 2 then
+            bioNebula.pulse = bioNebula.pulse - math.pi * 2
+        end
+        
+        -- Update cell patterns
+        for _, cell in ipairs(bioNebula.cellPattern) do
+            cell.pulseOffset = cell.pulseOffset + cell.pulseSpeed * dt
+        end
+        
+        -- Spawn spore drones
+        bioNebula.sporeSpawnTimer = bioNebula.sporeSpawnTimer + dt
+        if bioNebula.sporeSpawnTimer >= bioNebula.sporeSpawnInterval then
+            bioNebula.sporeSpawnTimer = 0
+            
+            local angle = love.math.random() * math.pi * 2
+            local distance = love.math.random(bioNebula.radius * 0.3, bioNebula.radius * 0.8)
+            local spawnX = bioNebula.x + math.cos(angle) * distance
+            local spawnY = bioNebula.y + math.sin(angle) * distance
+            
+            createSporeDrone(spawnX, spawnY, bioNebula)
+        end
+        
+        -- Update spore drones
+        for i = #bioNebula.sporeDrones, 1, -1 do
+            local drone = bioNebula.sporeDrones[i]
+            drone.life = drone.life - 1
+            drone.pulse = drone.pulse + drone.pulseSpeed
+            drone.movementTimer = drone.movementTimer + dt
+            
+            -- Change movement direction periodically
+            if drone.movementTimer >= drone.movementChange then
+                drone.movementTimer = 0
+                local angle = love.math.random() * math.pi * 2
+                local speed = love.math.random(50, 150)
+                drone.body:setLinearVelocity(math.cos(angle) * speed, math.sin(angle) * speed)
+            end
+            
+            -- Remove dead drones
+            if drone.life <= 0 or drone.health <= 0 then
+                drone.body:destroy()
+                table.remove(bioNebula.sporeDrones, i)
+            end
+        end
+        
+        -- Check player interaction
+        if PlayerX[1] and not shipSystems.landed and not shipSystems.docked then
+            local player = PlayerX[1]
+            local px, py = player.body:getPosition()
+            local dx, dy = px - bioNebula.x, py - bioNebula.y
+            local distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < bioNebula.radius then
+                -- Health regeneration
+                if shipSystems.health < shipSystems.maxHealth then
+                    shipSystems.health = math.min(shipSystems.maxHealth, 
+                        shipSystems.health + bioNebula.healthRegen * dt)
+                end
+                
+                -- Fuel consumption
+                shipSystems.fuel = math.max(0, shipSystems.fuel - bioNebula.fuelConsumption * dt)
+                
+                -- Visual feedback
+                if love.math.random() < 0.2 then
+                    createBioParticle(px, py, bioNebula.color)
+                end
+            end
+            
+            -- Check spore drone collisions
+            for _, drone in ipairs(bioNebula.sporeDrones) do
+                local dx, dy = px - drone.body:getX(), py - drone.body:getY()
+                local distance = math.sqrt(dx * dx + dy * dy)
+                
+                if distance < 40 then -- Collision radius
+                    applyDamage(drone.damage, "Spore Drone")
+                    drone.health = 0 -- Destroy drone on collision
+                    
+                    createDamageEffect(px, py, {0.5, 1, 0.5})
+                end
+            end
+        end
+    end
+end
+
+-- NEW: Create tesseract energy particle
+function createTesseractEnergyParticle(x, y, color)
+    local angle = love.math.random() * math.pi * 2
+    local speed = love.math.random(50, 200)
+    table.insert(particles, {
+        x = x, y = y,
+        vx = math.cos(angle) * speed,
+        vy = math.sin(angle) * speed,
+        life = love.math.random(30, 60),
+        color = color or {0.7, 0.3, 1, 1},
+        size = love.math.random(2, 4),
+        glow = true
+    })
+end
+
+-- NEW: Create bio particle
+function createBioParticle(x, y, color)
+    local angle = love.math.random() * math.pi * 2
+    local speed = love.math.random(20, 80)
+    table.insert(particles, {
+        x = x, y = y,
+        vx = math.cos(angle) * speed,
+        vy = math.sin(angle) * speed,
+        life = love.math.random(40, 80),
+        color = {color[1], color[2], color[3], 0.7},
+        size = love.math.random(1, 3),
+        organic = true
+    })
+end
+
+-- OPTIONAL: improved draw that depth-sorts vertices/edges slightly (replace your drawTesseracts if you want)
+function drawTesseracts()
+    for _, t in ipairs(tesseracts) do
+        local pulseFactor = 0.7 + 0.3 * math.sin(t.pulse)
+
+        -- energy & anomaly fields
+        love.graphics.setColor(0.7, 0.3, 1, 0.08 * pulseFactor)
+        love.graphics.circle("fill", t.x, t.y, t.energyField.radius)
+
+        love.graphics.setColor(0.9, 0.5, 0.2, 0.04 * pulseFactor)
+        love.graphics.circle("fill", t.x, t.y, t.anomalyField.radius)
+
+        -- depth sort vertices by z descending (furthest drawn first)
+        table.sort(t.vertices, function(a,b) return a.z < b.z end)
+
+        -- draw edges (use vertex indices so fetch from t.vertices by index)
+        love.graphics.setLineWidth(2)
+        for _, edge in ipairs(t.edges) do
+            local v1 = t.vertices[edge[1]]
+            local v2 = t.vertices[edge[2]]
+            if v1 and v2 then
+                -- color varies by original4D.x and pulse
+                local intensity = 0.5 + 0.5 * pulseFactor
+                local r = 0.3 + 0.7 * ((v1.original4D[1] + 1) / 2) * intensity
+                local g = 0.1 + 0.9 * ((v1.original4D[2] + 1) / 2) * intensity
+                local b = 0.7 + 0.3 * ((v1.original4D[3] + 1) / 2) * intensity
+                love.graphics.setColor(r, g, b, 0.9 * pulseFactor)
+                love.graphics.line(v1.x, v1.y, v2.x, v2.y)
+            end
+        end
+        love.graphics.setLineWidth(1)
+
+        -- vertices
+        for _, v in ipairs(t.vertices) do
+            local size = 6 + 3 * math.sin(t.pulse + (v.original4D[4] or 0) * math.pi)
+            local r = 0.8 + 0.2 * ((v.original4D[1] + 1) / 2)
+            local g = 0.4 + 0.6 * ((v.original4D[2] + 1) / 2)
+            local b = 1.0
+            love.graphics.setColor(r, g, b, 0.95 * pulseFactor)
+            love.graphics.circle("fill", v.x, v.y, size)
+            love.graphics.setColor(1, 1, 1, 0.6 * pulseFactor)
+            love.graphics.circle("fill", v.x, v.y, size * 0.45)
+        end
+
+        -- label and debug info
+        love.graphics.setColor(1,1,1,0.8)
+        love.graphics.print("TESSERACT", t.x - 40, t.y - t.size - 40)
+        if game.debugMode then
+            love.graphics.print("EnergyField: "..t.energyField.radius, t.x - 40, t.y + t.size + 10)
+            love.graphics.print("AnomalyField: "..t.anomalyField.radius, t.x - 40, t.y + t.size + 30)
+        end
+    end
+end
+
+-- NEW: Draw bio nebulae
+function drawBioNebulae()
+    for _, bioNebula in ipairs(bionebulae) do
+        local pulseFactor = 0.8 + 0.2 * math.sin(bioNebula.pulse)
+        
+        -- Draw main nebula cloud
+        love.graphics.setColor(
+            bioNebula.color[1], 
+            bioNebula.color[2], 
+            bioNebula.color[3], 
+            bioNebula.color[4] * pulseFactor
+        )
+        love.graphics.circle("fill", bioNebula.x, bioNebula.y, bioNebula.radius)
+        
+        -- Draw organic cell pattern
+        for _, cell in ipairs(bioNebula.cellPattern) do
+            local cellPulse = 0.7 + 0.3 * math.sin(bioNebula.pulse + cell.pulseOffset)
+            local cellX = bioNebula.x + cell.x
+            local cellY = bioNebula.y + cell.y
+            
+            -- Cell body
+            love.graphics.setColor(
+                bioNebula.color[1] + 0.3, 
+                bioNebula.color[2] + 0.1, 
+                bioNebula.color[3] - 0.2, 
+                0.6 * cellPulse
+            )
+            love.graphics.circle("fill", cellX, cellY, cell.size * cellPulse)
+            
+            -- Cell nucleus
+            love.graphics.setColor(1, 0.8, 0.9, 0.8 * cellPulse)
+            love.graphics.circle("fill", cellX, cellY, cell.size * 0.3 * cellPulse)
+            
+            -- Cell membrane
+            love.graphics.setColor(0.2, 0.8, 0.3, 0.4 * cellPulse)
+            love.graphics.circle("line", cellX, cellY, cell.size * cellPulse)
+        end
+        
+        -- Draw spore drones
+        for _, drone in ipairs(bioNebula.sporeDrones) do
+            local x, y = drone.body:getPosition()
+            local dronePulse = 0.5 + 0.5 * math.sin(drone.pulse)
+            local healthPercent = drone.life / drone.maxLife
+            
+            -- Drone body
+            love.graphics.setColor(0.3, 0.8, 0.4, 0.9 * healthPercent)
+            love.graphics.circle("fill", x, y, 15 * dronePulse)
+            
+            -- Drone core
+            love.graphics.setColor(0.9, 1, 0.5, 0.8 * healthPercent)
+            love.graphics.circle("fill", x, y, 6 * dronePulse)
+            
+            -- Health indicator
+            if game.debugMode then
+                love.graphics.setColor(1, 1, 1, 0.7)
+                love.graphics.print(math.floor(healthPercent * 100) .. "%", x - 10, y + 20)
+            end
+        end
+        
+        -- Draw label
+        love.graphics.setColor(0.2, 1, 0.3, 0.8)
+        love.graphics.print("BIO NEBULA", bioNebula.x - 40, bioNebula.y - bioNebula.radius - 30)
+        
+        -- Draw interaction info
+        if PlayerX[1] then
+            local player = PlayerX[1]
+            local px, py = player.body:getPosition()
+            local dx, dy = px - bioNebula.x, py - bioNebula.y
+            local distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < bioNebula.radius then
+                love.graphics.setColor(0, 1, 0, 0.8)
+                love.graphics.print("HEALTH REGENERATION ACTIVE", bioNebula.x - 80, bioNebula.y + bioNebula.radius + 10)
+                love.graphics.print("FUEL CONSUMPTION: " .. bioNebula.fuelConsumption .. "/s", bioNebula.x - 60, bioNebula.y + bioNebula.radius + 30)
+            end
+        end
+    end
+end
+
+-- NEW: Create supermassive black hole
+function createSupermassiveBlackHole()
+    local supermassive = {
+        body = love.physics.newBody(world, 0, 500000, "static"), -- Far away from solar system
+        radius = 10000, -- Massive size
+        gravityRadius = 300000, -- Huge gravity reach
+        gravityStrength = 50000000, -- Extremely powerful gravity
+        type = "supermassive_blackhole",
+        rotation = 0,
+        rotationSpeed = 0.001, -- Slow rotation
+        damageRadius = 20000,
+        damagePerSecond = 100, -- High damage
+        name = "SUPERMASSIVE BLACK HOLE"
+    }
+    
+    local shape = love.physics.newCircleShape(supermassive.radius)
+    supermassive.fixture = love.physics.newFixture(supermassive.body, shape, 1)
+    supermassive.fixture:setSensor(true)
+    
+    table.insert(blackholes, supermassive)
+end
+
+-- NEW: Create demon planet
+function createDemonPlanet()
+    local angle = love.math.random() * math.pi * 2
+    local distance = love.math.random(120000, 180000) -- Far out
+    local x = math.cos(angle) * distance
+    local y = math.sin(angle) * distance
+    
+    local demon = createPlanet(x, y, 1200, 3000, 60000, "DEMON PLANET", {0.8, 0.1, 0.1})
+    demon.isDemon = true
+    demon.horns = {}
+    demon.orbitRadius = distance
+    demon.orbitSpeed = 0.05
+    demon.orbitAngle = angle
+    demon.initialAngle = angle
+    demon.landingRadius = demon.radius + 100
+    demon.canLand = false -- Can't land on demon planet
+    
+    -- Create horn positions around the planet
+    for i = 1, 8 do
+        local hornAngle = (i / 8) * math.pi * 2
+        table.insert(demon.horns, {
+            angle = hornAngle,
+            length = love.math.random(150, 250),
+            width = love.math.random(30, 60)
+        })
+    end
+    
+    table.insert(planets, demon)
+end
+
+-- NEW: Create a bullet
+function createBullet(x, y, angle)
+    local speed = 800
+    local vx = math.cos(angle) * speed
+    local vy = math.sin(angle) * speed
+    
+    local body = love.physics.newBody(world, x, y, "dynamic")
+    local shape = love.physics.newCircleShape(5)
+    local fixture = love.physics.newFixture(body, shape, 0.1)
+    fixture:setSensor(true) -- Don't collide physically, just detect
+    
+    body:setLinearVelocity(vx, vy)
+    
+    local bullet = {
+        body = body,
+        shape = shape,
+        life = 2, -- seconds
+        damage = shipSystems.weapons.damage
+    }
+    
+    table.insert(bullets, bullet)
+    return bullet
+end
+
+-- NEW: Update bullets
+function updateBullets(dt)
+    for i = #bullets, 1, -1 do
+        local bullet = bullets[i]
+        bullet.life = bullet.life - dt
+        
+        if bullet.life <= 0 then
+            bullet.body:destroy()
+            table.remove(bullets, i)
+        else
+            -- Check collision with enemies
+            for j = #enemies, 1, -1 do
+                local enemy = enemies[j]
+                if not enemy.dead then
+                    local bx, by = bullet.body:getPosition()
+                    local ex, ey = enemy.body:getPosition()
+                    local dx, dy = bx - ex, by - ey
+                    local distance = math.sqrt(dx * dx + dy * dy)
+                    
+                    if distance < 30 then -- Collision radius
+                        -- Hit enemy!
+                        enemy.health = enemy.health - bullet.damage
+                        
+                        if enemy.health <= 0 then
+                            killEnemy(enemy, j)
+                            game.score = game.score + 50
+                            createFloatingText(ex, ey - 50, "Enemy Destroyed! +50")
+                        else
+                            createDamageEffect(ex, ey, {1, 0, 0})
+                            createFloatingText(ex, ey - 50, "-" .. bullet.damage)
+                        end
+                        
+                        -- Remove bullet
+                        bullet.body:destroy()
+                        table.remove(bullets, i)
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- NEW: Kill enemy and make it float as debris
+function killEnemy(enemy, index)
+    enemy.dead = true
+    enemy.deathTime = love.timer.getTime()
+    
+    -- Change enemy color to indicate dead
+    enemy.deadColor = {0.3, 0.3, 0.3} -- Gray
+    
+    -- Stop AI behavior but keep physics
+    -- The body will continue to move due to physics and gravity
+    
+    -- Move to dead enemies table
+    table.insert(deadEnemies, enemy)
+    table.remove(enemies, index)
+    
+    -- Create explosion effect
+    createExplosionEffect(enemy.body:getPosition())
+end
+
+-- NEW: Create explosion effect
+function createExplosionEffect(x, y)
+    for i = 1, 20 do
+        local angle = love.math.random() * math.pi * 2
+        local speed = love.math.random(50, 200)
+        table.insert(particles, {
+            x = x, y = y,
+            vx = math.cos(angle) * speed,
+            vy = math.sin(angle) * speed,
+            life = love.math.random(20, 40),
+            color = {1, 0.5, 0, 1}, -- Orange explosion
+            size = love.math.random(2, 5)
+        })
+    end
+end
+
+-- NEW: Fire weapon
+function fireWeapon()
+    if shipSystems.weapons.cooldown <= 0 and shipSystems.energy >= shipSystems.weapons.energyCost then
+        if PlayerX[1] then
+            local player = PlayerX[1]
+            local x, y = player.body:getPosition()
+            local angle = player.body:getAngle()
+            
+            -- Create bullet at player's position facing forward
+            createBullet(x, y, angle)
+            
+            -- Consume energy
+            shipSystems.energy = math.max(0, shipSystems.energy - shipSystems.weapons.energyCost)
+            
+            -- Set cooldown
+            shipSystems.weapons.cooldown = shipSystems.weapons.maxCooldown
+            
+            -- Create muzzle flash
+            local bx, by = player.body:getWorldPoint(0, -player.h / 2)
+            for i = 1, 5 do
+                local flashAngle = angle + love.math.random(-0.2, 0.2)
+                local speed = love.math.random(100, 200)
+                table.insert(particles, {
+                    x = bx, y = by,
+                    vx = math.cos(flashAngle) * speed,
+                    vy = math.sin(flashAngle) * speed,
+                    life = love.math.random(10, 20),
+                    color = {1, 1, 0, 1}, -- Yellow flash
+                    size = love.math.random(1, 3)
+                })
+            end
+        end
+    end
+end
 
 
 -- NEW: Create supermassive black hole
@@ -930,7 +1652,14 @@ function createAsteroidObj(x, y, size)
     }
 end
 
+
+
+
+-- MODIFIED: Update gravity to track total force on player
 function updateGravity(dt)
+    -- Reset gravity tracking
+    debugInfo.totalGravityForce = {x = 0, y = 0, magnitude = 0}
+    
     -- Apply planetary gravity
     for _, planet in ipairs(planets) do
         local px, py = planet.body:getPosition()
@@ -956,7 +1685,12 @@ function updateGravity(dt)
         end
 
         for _, body in ipairs(allBodies) do
-            applyBodyGravity(body, px, py, planet.gravityRadius, planet.gravityStrength, dt)
+            local force = applyBodyGravity(body, px, py, planet.gravityRadius, planet.gravityStrength, dt)
+            -- Track player gravity
+            if body == PlayerX[1].body and force then
+                debugInfo.totalGravityForce.x = debugInfo.totalGravityForce.x + force.x
+                debugInfo.totalGravityForce.y = debugInfo.totalGravityForce.y + force.y
+            end
         end
     end
     
@@ -977,7 +1711,12 @@ function updateGravity(dt)
         for _, c in ipairs(comets) do table.insert(allBodies, c.body) end
         
         for _, body in ipairs(allBodies) do
-            applyBodyGravity(body, bx, by, blackhole.gravityRadius, blackhole.gravityStrength, dt)
+            local force = applyBodyGravity(body, bx, by, blackhole.gravityRadius, blackhole.gravityStrength, dt)
+            -- Track player gravity
+            if body == PlayerX[1].body and force then
+                debugInfo.totalGravityForce.x = debugInfo.totalGravityForce.x + force.x
+                debugInfo.totalGravityForce.y = debugInfo.totalGravityForce.y + force.y
+            end
         end
     end
     
@@ -1019,7 +1758,12 @@ function updateGravity(dt)
         for _, c in ipairs(comets) do table.insert(allBodies, c.body) end
         
         for _, body in ipairs(allBodies) do
-            applyBodyGravity(body, qx, qy, quasar.gravityRadius, quasar.gravityStrength, dt)
+            local force = applyBodyGravity(body, qx, qy, quasar.gravityRadius, quasar.gravityStrength, dt)
+            -- Track player gravity
+            if body == PlayerX[1].body and force then
+                debugInfo.totalGravityForce.x = debugInfo.totalGravityForce.x + force.x
+                debugInfo.totalGravityForce.y = debugInfo.totalGravityForce.y + force.y
+            end
         end
     end
     
@@ -1031,7 +1775,14 @@ function updateGravity(dt)
             applyMagnetarEffects(PlayerX[1], mx, my, magnetar, dt)
         end
     end
+    
+    -- Calculate total gravity magnitude
+    debugInfo.totalGravityForce.magnitude = math.sqrt(
+        debugInfo.totalGravityForce.x * debugInfo.totalGravityForce.x +
+        debugInfo.totalGravityForce.y * debugInfo.totalGravityForce.y
+    )
 end
+
 
 function applyBodyGravity(body, px, py, gravityRadius, gravityStrength, dt)
     local bx, by = body:getPosition()
@@ -1043,7 +1794,9 @@ function applyBodyGravity(body, px, py, gravityRadius, gravityStrength, dt)
         -- Realistic inverse-square gravity
         local force = gravityStrength / (distance * distance)
         body:applyForce(dirX * force, dirY * force)
+        return {x = dirX * force, y = dirY * force}
     end
+    return nil
 end
 
 function applyBodyRepulsion(body, px, py, repulsionRadius, repulsionStrength, dt)
@@ -1644,7 +2397,8 @@ end
 
 
 
--- Update the update function to include bullets
+
+-- MODIFIED: Update function to include new cosmic objects
 function love.update(dt)
     if game.state ~= "playing" and game.state ~= "landed" then return end
     
@@ -1674,6 +2428,12 @@ function love.update(dt)
         shipSystems.weapons.cooldown = shipSystems.weapons.cooldown - dt
     end
     
+    -- NEW: Update tesseracts
+    updateTesseracts(dt)
+    
+    -- NEW: Update bio nebulae
+    updateBioNebulae(dt)
+    
     -- Handle touch controls
     updateTouchControls(dt)
     
@@ -1686,7 +2446,6 @@ function love.update(dt)
         camera.scale = math.max(camera.scale - 0.01, 0.001)
     end
 end
-
 
 function updateShipSystems(dt)
     -- Energy regeneration
@@ -1725,7 +2484,9 @@ function updateTouchButtonPositions()
         elseif button.id == "zoom_in" then
             button.x, button.y = w - 50, 0
         elseif button.id == "zoom_out" then
-            button.x, button.y = w - 100, 0
+            button.x, button.y = w - 100, 0   
+		elseif button.id == "debug" then
+            button.x, button.y = w - 150, 0
         elseif button.id == "boost" then
             button.x, button.y = w - 200, h - 250
         elseif button.id == "land" then
@@ -1821,7 +2582,9 @@ function handleTouchInput(buttonId)
     elseif buttonId == "zoom_in" then
         camera.scale = math.min(camera.scale + 0.01, camera.maxScale)
     elseif buttonId == "zoom_out" then
-        camera.scale = math.max(camera.scale - 0.01, camera.minScale)
+        camera.scale = math.max(camera.scale - 0.01, camera.minScale) 
+	elseif buttonId == "debug" then
+        game.debugMode = not game.debugMode
     elseif buttonId == "boost" then
         if shipSystems.energy > 0 then
             shipSystems.boostActive = true
@@ -1860,6 +2623,9 @@ function love.draw()
     -- Draw nebulae
     drawNebulae()
     
+    -- NEW: Draw bio nebulae
+    drawBioNebulae()
+    
     -- Draw all objects
     drawSupernovae()
     drawQuasars()
@@ -1871,6 +2637,10 @@ function love.draw()
     drawWormholes()
     drawWhiteholes()
     drawBlackholes() -- This will include the supermassive black hole
+    
+    -- NEW: Draw tesseracts
+    drawTesseracts()
+    
     drawPlanets() -- This will include the demon planet
     drawOrbiters()
     drawAsteroids()
@@ -2329,6 +3099,7 @@ function createPlayer()
     local ex, ey = earth.body:getPosition()
     local startX = ex + earth.radius + 500 -- Start further from planet surface
     local startY = ey
+	-- local startX, startY = 500000, 500000
     
     local body = love.physics.newBody(world, startX, startY, "dynamic")
     local shape = love.physics.newRectangleShape(30, 60) -- Smaller player
@@ -2535,7 +3306,9 @@ function drawTouchControls()
         elseif button.id == "zoom_in" then
             love.graphics.print("+", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
         elseif button.id == "zoom_out" then
-            love.graphics.print("-", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
+            love.graphics.print("-", button.x + button.width/2 - 5, button.y + button.height/2 - 10)    
+		elseif button.id == "debug" then
+            love.graphics.print("dbg", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
         elseif button.id == "boost" then
             love.graphics.print("BST", button.x + button.width/2 - 10, button.y + button.height/2 - 10)
         elseif button.id == "brake" then
@@ -2925,6 +3698,9 @@ function drawUI()
         love.graphics.print("Magnetars: " .. #magnetars, margin + 150, objectCountsY + lineHeight * 3)
         love.graphics.print("Space Stations: " .. #spacestations, margin, objectCountsY + lineHeight * 4)
         love.graphics.print("Dead Enemies: " .. #deadEnemies, margin + 150, objectCountsY + lineHeight * 4)
+        -- NEW: Additional object counts
+        love.graphics.print("Tesseracts: " .. #tesseracts, margin, objectCountsY + lineHeight * 5)
+        love.graphics.print("Bio Nebulae: " .. #bionebulae, margin + 150, objectCountsY + lineHeight * 5)
     else
         -- Single column for smaller screens
         love.graphics.print("Asteroids: " .. #box_i, margin, objectCountsY)
@@ -2937,6 +3713,9 @@ function drawUI()
         love.graphics.print("Magnetars: " .. #magnetars, margin, objectCountsY + lineHeight * 7)
         love.graphics.print("Space Stations: " .. #spacestations, margin, objectCountsY + lineHeight * 8)
         love.graphics.print("Dead Enemies: " .. #deadEnemies, margin, objectCountsY + lineHeight * 9)
+        -- NEW: Additional object counts
+        love.graphics.print("Tesseracts: " .. #tesseracts, margin, objectCountsY + lineHeight * 10)
+        love.graphics.print("Bio Nebulae: " .. #bionebulae, margin, objectCountsY + lineHeight * 11)
     end
     
     -- Ship systems status - positioned based on screen size
@@ -2945,7 +3724,17 @@ function drawUI()
     -- Debug mode indicator
     if game.debugMode then
         love.graphics.setColor(1, 0, 0)
-        love.graphics.print("DEBUG MODE ACTIVE", margin, screenHeight - lineHeight * 3)
+        love.graphics.print("DEBUG MODE ACTIVE", margin, screenHeight - lineHeight * 10)
+        
+        -- NEW: Detailed gravity information
+        if debugInfo.showDetailedInfo then
+            love.graphics.setColor(1, 1, 0)
+            love.graphics.print("TOTAL GRAVITY FORCE:", margin, screenHeight - lineHeight * 12)
+            love.graphics.print("X: " .. string.format("%.2f", debugInfo.totalGravityForce.x), margin, screenHeight - lineHeight * 11)
+            love.graphics.print("Y: " .. string.format("%.2f", debugInfo.totalGravityForce.y), margin, screenHeight - lineHeight * 10)
+            love.graphics.print("Magnitude: " .. string.format("%.2f", debugInfo.totalGravityForce.magnitude), margin, screenHeight - lineHeight * 9)
+        end
+        
         love.graphics.setColor(1, 1, 1)
     end
     
@@ -2957,27 +3746,27 @@ function drawUI()
     end
     
     -- Instructions - right side, but adjust based on screen width
-    local instructionsX = math.max(screenWidth - 250, screenWidth * 0.6)
-    love.graphics.print("SOLAR SYSTEM EXPLORATION", instructionsX, margin)
-    for i, instruction in ipairs(cameraInstructions) do
-        love.graphics.print(instruction, instructionsX, margin + i * lineHeight)
-    end
+    -- local instructionsX = math.max(screenWidth - 250, screenWidth * 0.6)
+    -- love.graphics.print("SOLAR SYSTEM EXPLORATION", instructionsX, margin)
+    -- for i, instruction in ipairs(cameraInstructions) do
+        -- love.graphics.print(instruction, instructionsX, margin + i * lineHeight)
+    -- end
     
     -- Game controls - adjust position based on available space
-    local controlsY = margin + (#cameraInstructions + 2) * lineHeight
-    if controlsY < screenHeight * 0.7 then
-        love.graphics.print("Space Controls:", instructionsX, controlsY)
-        love.graphics.print("Arrow Keys: Thrusters", instructionsX, controlsY + lineHeight)
-        love.graphics.print("PageUp/Down: Rotate", instructionsX, controlsY + lineHeight * 2)
-        love.graphics.print("Shift: Boost", instructionsX, controlsY + lineHeight * 3)
-        love.graphics.print("Space: Brake", instructionsX, controlsY + lineHeight * 4)
-        love.graphics.print("L: Land/Takeoff", instructionsX, controlsY + lineHeight * 5)
-        love.graphics.print("C: Auto Dock", instructionsX, controlsY + lineHeight * 6)
-        love.graphics.print("F: Fire Weapons", instructionsX, controlsY + lineHeight * 7) -- NEW: Fire control
-        love.graphics.print("Visit planets for points!", instructionsX, controlsY + lineHeight * 8)
-        love.graphics.print("Use wormholes for teleport!", instructionsX, controlsY + lineHeight * 9)
-        love.graphics.print("H: Toggle Controls", instructionsX, controlsY + lineHeight * 10)
-    end
+    -- local controlsY = margin + (#cameraInstructions + 2) * lineHeight
+    -- if controlsY < screenHeight * 0.7 then
+        -- love.graphics.print("Space Controls:", instructionsX, controlsY)
+        -- love.graphics.print("Arrow Keys: Thrusters", instructionsX, controlsY + lineHeight)
+        -- love.graphics.print("PageUp/Down: Rotate", instructionsX, controlsY + lineHeight * 2)
+        -- love.graphics.print("Shift: Boost", instructionsX, controlsY + lineHeight * 3)
+        -- love.graphics.print("Space: Brake", instructionsX, controlsY + lineHeight * 4)
+        -- love.graphics.print("L: Land/Takeoff", instructionsX, controlsY + lineHeight * 5)
+        -- love.graphics.print("C: Auto Dock", instructionsX, controlsY + lineHeight * 6)
+        -- love.graphics.print("F: Fire Weapons", instructionsX, controlsY + lineHeight * 7) -- NEW: Fire control
+        -- love.graphics.print("Visit planets for points!", instructionsX, controlsY + lineHeight * 8)
+        -- love.graphics.print("Use wormholes for teleport!", instructionsX, controlsY + lineHeight * 9)
+        -- love.graphics.print("H: Toggle Controls", instructionsX, controlsY + lineHeight * 10)
+    -- end
     
     -- Weapon cooldown indicator
     if shipSystems.weapons.cooldown > 0 then
@@ -3180,6 +3969,8 @@ function love.keypressed(key)
         camera.scale = 0.01
     elseif key == "f5" then
         game.debugMode = not game.debugMode
+    elseif key == "f6" then
+        debugInfo.showDetailedInfo = not debugInfo.showDetailedInfo
     elseif key == "p" then
         if game.state == "playing" then
             game.state = "paused"
