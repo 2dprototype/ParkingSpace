@@ -32,6 +32,8 @@ function love.load()
     magnetars = {}
     asteroidfields = {}
     spacestations = {}
+    bullets = {} -- NEW: Bullets for shooting
+    deadEnemies = {} -- NEW: Store dead enemies
     
     createSolarSystem() -- Create sun and orbiting planets
     createAsteroidBelts() -- Create asteroid belts
@@ -42,7 +44,13 @@ function love.load()
     createSpaceStations() -- Create space stations
     createPlayer()
     createEnemies()
-    createBalls()
+    -- createBalls()
+    
+    -- NEW: Create supermassive black hole
+    createSupermassiveBlackHole()
+    
+    -- NEW: Create demon planet
+    createDemonPlanet()
     
     -- Enhanced Camera setup for massive space exploration
     camera = {
@@ -70,7 +78,8 @@ function love.load()
         "H: Toggle Controls",
         "Shift: Boost",
         "Space: Brake",
-        "C: Toggle Docking Computer"
+        "C: Toggle Docking Computer",
+        "F: Fire Weapons" -- NEW: Shooting instruction
     }
     
     -- Debug info
@@ -98,7 +107,13 @@ function love.load()
         landed = false,
         landingPlanet = nil,
         docked = false,
-        dockingStation = nil
+        dockingStation = nil,
+        weapons = { -- NEW: Weapons system
+            cooldown = 0,
+            maxCooldown = 0.3, -- seconds between shots
+            damage = 10,
+            energyCost = 5
+        }
     }
     
     -- Android touch controls
@@ -109,105 +124,305 @@ function love.load()
                 id = "up",
                 x = love.graphics.getWidth() - 200,
                 y = love.graphics.getHeight() - 300,
-                width = 80,
-                height = 80,
-                color = {0, 0.8, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {0, 0.8, 0, 0.5},
                 active = false
             },
             {
                 id = "left",
                 x = love.graphics.getWidth() - 280,
                 y = love.graphics.getHeight() - 200,
-                width = 80,
-                height = 80,
-                color = {0, 0.8, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {0, 0.8, 0, 0.5},
                 active = false
             },
             {
                 id = "right",
                 x = love.graphics.getWidth() - 120,
                 y = love.graphics.getHeight() - 200,
-                width = 80,
-                height = 80,
-                color = {0, 0.8, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {0, 0.8, 0, 0.5},
                 active = false
             },
             {
                 id = "down",
                 x = love.graphics.getWidth() - 200,
                 y = love.graphics.getHeight() - 120,
-                width = 80,
-                height = 80,
-                color = {0, 0.8, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {0, 0.8, 0, 0.5},
                 active = false
             },
             {
                 id = "rotate_left",
                 x = 120,
                 y = love.graphics.getHeight() - 200,
-                width = 80,
-                height = 80,
-                color = {0.8, 0.8, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {0.8, 0.8, 0, 0.5},
                 active = false
             },
             {
                 id = "rotate_right",
                 x = 220,
                 y = love.graphics.getHeight() - 200,
-                width = 80,
-                height = 80,
-                color = {0.8, 0.8, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {0.8, 0.8, 0, 0.5},
                 active = false
             },
             {
                 id = "zoom_in",
                 x = love.graphics.getWidth() - 100,
                 y = 100,
-                width = 60,
-                height = 60,
-                color = {0.2, 0.5, 1, 0.7},
+                width = 50,
+                height = 50,
+                color = {0.2, 0.5, 1, 0.5},
                 active = false
             },
             {
                 id = "zoom_out",
                 x = love.graphics.getWidth() - 100,
                 y = 180,
-                width = 60,
-                height = 60,
-                color = {0.2, 0.5, 1, 0.7},
+                width = 50,
+                height = 50,
+                color = {0.2, 0.5, 1, 0.5},
                 active = false
             },
             {
                 id = "boost",
                 x = love.graphics.getWidth() - 100,
                 y = 260,
-                width = 60,
-                height = 60,
-                color = {1, 0.5, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {1, 0.5, 0, 0.5},
                 active = false
             },
             {
                 id = "brake",
                 x = love.graphics.getWidth() - 100,
                 y = 340,
-                width = 60,
-                height = 60,
-                color = {1, 0, 0, 0.7},
+                width = 50,
+                height = 50,
+                color = {1, 0, 0, 0.5},
                 active = false
             },
             {
                 id = "land",
                 x = 300,
                 y = love.graphics.getHeight() - 100,
-                width = 100,
-                height = 60,
-                color = {0, 0.5, 1, 0.7},
+                width = 50,
+                height = 50,
+                color = {0, 0.5, 1, 0.5},
+                active = false
+            },
+            { -- NEW: Fire button
+                id = "fire",
+                x = 400,
+                y = love.graphics.getHeight() - 100,
+                width = 50,
+                height = 50,
+                color = {1, 0, 0, 0.5},
                 active = false
             }
         }
     }
     
     updateTouchButtonPositions()
+end
+
+
+
+-- NEW: Create supermassive black hole
+function createSupermassiveBlackHole()
+    local supermassive = {
+        body = love.physics.newBody(world, 0, 500000, "static"), -- Far away from solar system
+        radius = 10000, -- Massive size
+        gravityRadius = 300000, -- Huge gravity reach
+        gravityStrength = 50000000, -- Extremely powerful gravity
+        type = "supermassive_blackhole",
+        rotation = 0,
+        rotationSpeed = 0.001, -- Slow rotation
+        damageRadius = 20000,
+        damagePerSecond = 100, -- High damage
+        name = "SUPERMASSIVE BLACK HOLE"
+    }
+    
+    local shape = love.physics.newCircleShape(supermassive.radius)
+    supermassive.fixture = love.physics.newFixture(supermassive.body, shape, 1)
+    supermassive.fixture:setSensor(true)
+    
+    table.insert(blackholes, supermassive)
+end
+
+-- NEW: Create demon planet
+function createDemonPlanet()
+    local angle = love.math.random() * math.pi * 2
+    local distance = love.math.random(120000, 180000) -- Far out
+    local x = math.cos(angle) * distance
+    local y = math.sin(angle) * distance
+    
+    local demon = createPlanet(x, y, 1200, 3000, 60000, "DEMON PLANET", {0.8, 0.1, 0.1})
+    demon.isDemon = true
+    demon.horns = {}
+    demon.orbitRadius = distance
+    demon.orbitSpeed = 0.05
+    demon.orbitAngle = angle
+    demon.initialAngle = angle
+    demon.landingRadius = demon.radius + 100
+    demon.canLand = false -- Can't land on demon planet
+    
+    -- Create horn positions around the planet
+    for i = 1, 8 do
+        local hornAngle = (i / 8) * math.pi * 2
+        table.insert(demon.horns, {
+            angle = hornAngle,
+            length = love.math.random(150, 250),
+            width = love.math.random(30, 60)
+        })
+    end
+    
+    table.insert(planets, demon)
+end
+
+-- NEW: Create a bullet
+function createBullet(x, y, angle)
+    local speed = 800
+    local vx = math.cos(angle) * speed
+    local vy = math.sin(angle) * speed
+    
+    local body = love.physics.newBody(world, x, y, "dynamic")
+    local shape = love.physics.newCircleShape(5)
+    local fixture = love.physics.newFixture(body, shape, 0.1)
+    fixture:setSensor(true) -- Don't collide physically, just detect
+    
+    body:setLinearVelocity(vx, vy)
+    
+    local bullet = {
+        body = body,
+        shape = shape,
+        life = 2, -- seconds
+        damage = shipSystems.weapons.damage
+    }
+    
+    table.insert(bullets, bullet)
+    return bullet
+end
+
+-- NEW: Update bullets
+function updateBullets(dt)
+    for i = #bullets, 1, -1 do
+        local bullet = bullets[i]
+        bullet.life = bullet.life - dt
+        
+        if bullet.life <= 0 then
+            bullet.body:destroy()
+            table.remove(bullets, i)
+        else
+            -- Check collision with enemies
+            for j = #enemies, 1, -1 do
+                local enemy = enemies[j]
+                if not enemy.dead then
+                    local bx, by = bullet.body:getPosition()
+                    local ex, ey = enemy.body:getPosition()
+                    local dx, dy = bx - ex, by - ey
+                    local distance = math.sqrt(dx * dx + dy * dy)
+                    
+                    if distance < 30 then -- Collision radius
+                        -- Hit enemy!
+                        enemy.health = enemy.health - bullet.damage
+                        
+                        if enemy.health <= 0 then
+                            killEnemy(enemy, j)
+                            game.score = game.score + 50
+                            createFloatingText(ex, ey - 50, "Enemy Destroyed! +50")
+                        else
+                            createDamageEffect(ex, ey, {1, 0, 0})
+                            createFloatingText(ex, ey - 50, "-" .. bullet.damage)
+                        end
+                        
+                        -- Remove bullet
+                        bullet.body:destroy()
+                        table.remove(bullets, i)
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- NEW: Kill enemy and make it float as debris
+function killEnemy(enemy, index)
+    enemy.dead = true
+    enemy.deathTime = love.timer.getTime()
+    
+    -- Change enemy color to indicate dead
+    enemy.deadColor = {0.3, 0.3, 0.3} -- Gray
+    
+    -- Stop AI behavior but keep physics
+    -- The body will continue to move due to physics and gravity
+    
+    -- Move to dead enemies table
+    table.insert(deadEnemies, enemy)
+    table.remove(enemies, index)
+    
+    -- Create explosion effect
+    createExplosionEffect(enemy.body:getPosition())
+end
+
+-- NEW: Create explosion effect
+function createExplosionEffect(x, y)
+    for i = 1, 20 do
+        local angle = love.math.random() * math.pi * 2
+        local speed = love.math.random(50, 200)
+        table.insert(particles, {
+            x = x, y = y,
+            vx = math.cos(angle) * speed,
+            vy = math.sin(angle) * speed,
+            life = love.math.random(20, 40),
+            color = {1, 0.5, 0, 1}, -- Orange explosion
+            size = love.math.random(2, 5)
+        })
+    end
+end
+
+-- NEW: Fire weapon
+function fireWeapon()
+    if shipSystems.weapons.cooldown <= 0 and shipSystems.energy >= shipSystems.weapons.energyCost then
+        if PlayerX[1] then
+            local player = PlayerX[1]
+            local x, y = player.body:getPosition()
+            local angle = player.body:getAngle()
+            
+            -- Create bullet at player's position facing forward
+            createBullet(x, y, angle)
+            
+            -- Consume energy
+            shipSystems.energy = math.max(0, shipSystems.energy - shipSystems.weapons.energyCost)
+            
+            -- Set cooldown
+            shipSystems.weapons.cooldown = shipSystems.weapons.maxCooldown
+            
+            -- Create muzzle flash
+            local bx, by = player.body:getWorldPoint(0, -player.h / 2)
+            for i = 1, 5 do
+                local flashAngle = angle + love.math.random(-0.2, 0.2)
+                local speed = love.math.random(100, 200)
+                table.insert(particles, {
+                    x = bx, y = by,
+                    vx = math.cos(flashAngle) * speed,
+                    vy = math.sin(flashAngle) * speed,
+                    life = love.math.random(10, 20),
+                    color = {1, 1, 0, 1}, -- Yellow flash
+                    size = love.math.random(1, 3)
+                })
+            end
+        end
+    end
 end
 
 function createMagnetars()
@@ -1427,6 +1642,9 @@ function updateParticles(dt)
     end
 end
 
+
+
+-- Update the update function to include bullets
 function love.update(dt)
     if game.state ~= "playing" and game.state ~= "landed" then return end
     
@@ -1448,6 +1666,14 @@ function love.update(dt)
     updateCamera(dt)
     checkPlanetVisits()
     
+    -- NEW: Update bullets
+    updateBullets(dt)
+    
+    -- NEW: Update weapon cooldown
+    if shipSystems.weapons.cooldown > 0 then
+        shipSystems.weapons.cooldown = shipSystems.weapons.cooldown - dt
+    end
+    
     -- Handle touch controls
     updateTouchControls(dt)
     
@@ -1460,6 +1686,7 @@ function love.update(dt)
         camera.scale = math.max(camera.scale - 0.01, 0.001)
     end
 end
+
 
 function updateShipSystems(dt)
     -- Energy regeneration
@@ -1484,27 +1711,29 @@ function updateTouchButtonPositions()
     local w, h = love.graphics.getWidth(), love.graphics.getHeight()
     for _, button in ipairs(touchControls.buttons) do
         if button.id == "up" then
-            button.x, button.y = w - 200, h - 280
+            button.x, button.y = w - 150, h - 200
         elseif button.id == "left" then
-            button.x, button.y = w - 280, h - 200
+            button.x, button.y = w - 200, h - 150
         elseif button.id == "right" then
-            button.x, button.y = w - 120, h - 200
+            button.x, button.y = w - 100, h - 150
         elseif button.id == "down" then
-            button.x, button.y = w - 200, h - 120
+            button.x, button.y = w - 150, h - 100
         elseif button.id == "rotate_left" then
-            button.x, button.y = 80, h - 200
+            button.x, button.y = w - 200, h - 200
         elseif button.id == "rotate_right" then
-            button.x, button.y = 180, h - 200
+            button.x, button.y = w - 100, h - 200
         elseif button.id == "zoom_in" then
-            button.x, button.y = w - 100, 100
+            button.x, button.y = w - 50, 0
         elseif button.id == "zoom_out" then
-            button.x, button.y = w - 100, 180
+            button.x, button.y = w - 100, 0
         elseif button.id == "boost" then
-            button.x, button.y = w - 100, 260
-        elseif button.id == "brake" then
-            button.x, button.y = w - 100, 340
+            button.x, button.y = w - 200, h - 250
         elseif button.id == "land" then
-            button.x, button.y = 300, h - 100
+            button.x, button.y = w - 100, h - 250
+        elseif button.id == "brake" then
+            button.x, button.y = w - 250, h - 100
+        elseif button.id == "fire" then
+            button.x, button.y = w - 300, h - 100
         end
     end
 end
@@ -1611,11 +1840,13 @@ function handleTouchInput(buttonId)
         end
     elseif buttonId == "land" then
         -- Landing/takeoff handled in checkLandingConditions
+    elseif buttonId == "fire" then
+        fireWeapon()
     end
 end
 
 function love.draw()
-    love.graphics.clear(0.02, 0.02, 0.08) -- Very dark space background
+    love.graphics.clear(0.02, 0.02, 0.08)
     love.graphics.push()
     
     -- Apply camera transform
@@ -1639,15 +1870,16 @@ function love.draw()
     drawSpaceStations()
     drawWormholes()
     drawWhiteholes()
-    drawBlackholes()
-    drawPlanets()
+    drawBlackholes() -- This will include the supermassive black hole
+    drawPlanets() -- This will include the demon planet
     drawOrbiters()
     drawAsteroids()
-    drawEnemies()
+    drawEnemies() -- Updated to show dead enemies
     drawBalls()
     if PlayerX[1] then
         drawPlayer(PlayerX[1])
     end
+    drawBullets() -- NEW: Draw bullets
     drawParticles()
     
     -- Draw gravity zones in debug mode
@@ -1861,12 +2093,25 @@ function drawBlackholes()
     for _, blackhole in ipairs(blackholes) do
         local x, y = blackhole.body:getPosition()
         
-        -- Draw accretion disk
-        love.graphics.setColor(0.8, 0.6, 0.2, 0.3)
-        love.graphics.circle("fill", x, y, blackhole.radius * 2.5)
-        
-        love.graphics.setColor(0.6, 0.4, 0.1, 0.5)
-        love.graphics.circle("fill", x, y, blackhole.radius * 2)
+        -- Special rendering for supermassive black hole
+        if blackhole.type == "supermassive_blackhole" then
+            -- Draw massive accretion disk
+            love.graphics.setColor(0.9, 0.7, 0.3, 0.4)
+            love.graphics.circle("fill", x, y, blackhole.radius * 4)
+            
+            love.graphics.setColor(0.8, 0.6, 0.2, 0.6)
+            love.graphics.circle("fill", x, y, blackhole.radius * 3)
+            
+            love.graphics.setColor(0.7, 0.5, 0.1, 0.8)
+            love.graphics.circle("fill", x, y, blackhole.radius * 2)
+        else
+            -- Regular black hole rendering
+            love.graphics.setColor(0.8, 0.6, 0.2, 0.3)
+            love.graphics.circle("fill", x, y, blackhole.radius * 2.5)
+            
+            love.graphics.setColor(0.6, 0.4, 0.1, 0.5)
+            love.graphics.circle("fill", x, y, blackhole.radius * 2)
+        end
         
         -- Draw event horizon (black circle)
         love.graphics.setColor(0, 0, 0)
@@ -1886,9 +2131,14 @@ function drawBlackholes()
         
         -- Label
         love.graphics.setColor(1, 1, 1, 0.7)
-        love.graphics.print("BLACK HOLE", x - 40, y - blackhole.radius - 30)
+        if blackhole.type == "supermassive_blackhole" then
+            love.graphics.print("SUPERMASSIVE BLACK HOLE", x - 100, y - blackhole.radius - 50)
+        else
+            love.graphics.print("BLACK HOLE", x - 40, y - blackhole.radius - 30)
+        end
     end
 end
+
 
 function drawWhiteholes()
     for _, whitehole in ipairs(whiteholes) do
@@ -1975,13 +2225,37 @@ function drawPlanets()
                 love.graphics.setColor(1, 0.8, 0, 0.1 / i)
                 love.graphics.circle("fill", x, y, glowSize)
             end
-            love.graphics.setColor(planet.color[1], planet.color[2], planet.color[3]) -- Use planet color
+            love.graphics.setColor(planet.color[1], planet.color[2], planet.color[3])
         else
             -- Regular planet with its color
             love.graphics.setColor(planet.color[1], planet.color[2], planet.color[3])
         end
         
         love.graphics.circle("fill", x, y, planet.radius)
+        
+        -- Special rendering for demon planet
+        if planet.isDemon then
+            -- Draw horns
+            love.graphics.setColor(0.4, 0.1, 0.1)
+            for _, horn in ipairs(planet.horns) do
+                local hornX = x + math.cos(horn.angle) * (planet.radius + horn.length/2)
+                local hornY = y + math.sin(horn.angle) * (planet.radius + horn.length/2)
+                
+                love.graphics.push()
+                love.graphics.translate(hornX, hornY)
+                love.graphics.rotate(horn.angle)
+                love.graphics.polygon("fill", 
+                    -horn.width/2, -horn.length/2,
+                    horn.width/2, -horn.length/2,
+                    0, horn.length/2
+                )
+                love.graphics.pop()
+            end
+            
+            -- Evil glow
+            love.graphics.setColor(0.8, 0.1, 0.1, 0.3)
+            love.graphics.circle("fill", x, y, planet.radius * 1.2)
+        end
         
         -- Planet outline
         love.graphics.setColor(0.4, 0.4, 0.5)
@@ -2091,6 +2365,41 @@ function updatePlayer(dt)
     shipSystems.boostActive = false
     shipSystems.brakesActive = false
     
+
+    -- Space movement - apply forces in the direction the player is facing
+    if love.keyboard.isDown("right") then
+        if shipSystems.fuel > 0 then
+            body:applyForce(speed, 0)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
+        end
+    end
+    
+    if love.keyboard.isDown("left") then
+        if shipSystems.fuel > 0 then
+            body:applyForce(-speed, 0)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
+        end
+    end
+    
+    if love.keyboard.isDown("up") then
+        if shipSystems.fuel > 0 then
+            body:applyForce(0, -speed)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
+            
+            -- Thruster particles
+            createPlayerParticle(bx, by, angle)
+        end
+    end 
+    
+    if love.keyboard.isDown("down") then
+        if shipSystems.fuel > 0 then
+            body:applyForce(0, speed)
+            shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
+            
+            -- Thruster particles
+            createPlayerParticle(bx, by, angle + math.pi)
+        end
+    end
 
 
     -- Boost system
@@ -2207,7 +2516,7 @@ function drawTouchControls()
         -- Draw button background
         local color = button.active and {button.color[1], button.color[2], button.color[3], 1} or button.color
         love.graphics.setColor(color)
-        love.graphics.rectangle("fill", button.x, button.y, button.width, button.height)
+        love.graphics.rectangle("fill", button.x + 1, button.y + 1, button.width - 2, button.height - 2, 5)
         
         -- Draw button label
         love.graphics.setColor(1, 1, 1, 1)
@@ -2233,6 +2542,8 @@ function drawTouchControls()
             love.graphics.print("BRK", button.x + button.width/2 - 10, button.y + button.height/2 - 10)
         elseif button.id == "land" then
             love.graphics.print("LAND", button.x + button.width/2 - 15, button.y + button.height/2 - 10)
+        elseif button.id == "fire" then
+            love.graphics.print("FIRE", button.x + button.width/2 - 15, button.y + button.height/2 - 10)
         end
     end
 end
@@ -2261,20 +2572,22 @@ end
 
 function createEnemyObj(x, y, w, h, angle)
     local body = love.physics.newBody(world, x, y, "dynamic")
-    local shape = love.physics.newRectangleShape(w, h) -- Smaller enemies
+    local shape = love.physics.newRectangleShape(w, h)
     local fixture = love.physics.newFixture(body, shape, 1.2)
     fixture:setFriction(0.1)
     fixture:setRestitution(0.2)
-    -- fixture:setSensor(true)
     
     local enemy = {
         type = "enemy",
         body = body,
         shape = shape,
         fixture = fixture,
-        w = 6,   -- Smaller width
-        h = 12,  -- Smaller height
-        particles = {}
+        w = 6,
+        h = 12,
+        particles = {},
+        health = 30, -- NEW: Enemy health
+        maxHealth = 30,
+        dead = false -- NEW: Track if enemy is dead
     }
     
     return enemy
@@ -2361,18 +2674,71 @@ end
 
 function drawEnemies()
     for _, enemy in ipairs(enemies) do
-        love.graphics.setColor(1, 0.3, 0.3) -- Red enemy ships
+        if not enemy.dead then
+            love.graphics.setColor(1, 0.3, 0.3) -- Red enemy ships
+        else
+            love.graphics.setColor(0.3, 0.3, 0.3) -- Gray dead enemies
+        end
+        
         local x, y = enemy.body:getPosition()
         love.graphics.polygon("fill", enemy.body:getWorldPoints(enemy.shape:getPoints()))
         
         -- Draw enemy indicator
-        love.graphics.setColor(1, 0, 0, 0.5)
-        love.graphics.print("ENEMY", x - 20, y - 30)
+        if not enemy.dead then
+            love.graphics.setColor(1, 0, 0, 0.5)
+            love.graphics.print("ENEMY", x - 20, y - 30)
+        else
+            love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+            love.graphics.print("DEBRIS", x - 20, y - 30)
+        end
+        
+        -- Draw health bar for living enemies
+        if not enemy.dead then
+            local healthPercent = enemy.health / enemy.maxHealth
+            local barWidth = 40
+            local barHeight = 4
+            
+            love.graphics.setColor(1, 0, 0, 0.7)
+            love.graphics.rectangle("fill", x - barWidth/2, y - 40, barWidth, barHeight)
+            
+            love.graphics.setColor(0, 1, 0, 0.7)
+            love.graphics.rectangle("fill", x - barWidth/2, y - 40, barWidth * healthPercent, barHeight)
+            
+            love.graphics.setColor(1, 1, 1, 0.7)
+            love.graphics.rectangle("line", x - barWidth/2, y - 40, barWidth, barHeight)
+        end
         
         -- Draw particles
         drawEnemyParticles(enemy)
     end
+    
+    -- NEW: Draw dead enemies from the deadEnemies table
+    for _, enemy in ipairs(deadEnemies) do
+        love.graphics.setColor(0.3, 0.3, 0.3) -- Gray dead enemies
+        local x, y = enemy.body:getPosition()
+        love.graphics.polygon("fill", enemy.body:getWorldPoints(enemy.shape:getPoints()))
+        
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+        love.graphics.print("DEBRIS", x - 20, y - 30)
+        
+        drawEnemyParticles(enemy)
+    end
 end
+
+
+-- NEW: Draw bullets
+function drawBullets()
+    for _, bullet in ipairs(bullets) do
+        local x, y = bullet.body:getPosition()
+        love.graphics.setColor(1, 1, 0) -- Yellow bullets
+        love.graphics.circle("fill", x, y, 5)
+        
+        -- Draw trail
+        love.graphics.setColor(1, 0.5, 0, 0.5)
+        love.graphics.circle("fill", x, y, 3)
+    end
+end
+
 
 function drawEnemyParticles(enemy)
     for _, p in ipairs(enemy.particles) do
@@ -2478,7 +2844,7 @@ function updateCamera(dt)
         end
         
     elseif camera.mode == "free_move" then
-        local speed = camera.freeMoveSpeed * dt / camera.scale
+        local speed = camera.freeMoveSpeed * dt / 3
         
         if love.keyboard.isDown("w") or love.keyboard.isDown("up") then
             camera.y = camera.y - speed
@@ -2503,78 +2869,132 @@ function findFirstEnemy()
 end
 
 function drawUI()
+    local screenWidth = love.graphics.getWidth()
+    local screenHeight = love.graphics.getHeight()
+    
+    -- Use relative positioning for better responsiveness
+    local margin = math.min(20, screenWidth * 0.02)
+    local fontSize = math.max(10, screenHeight * 0.02)
+    local lineHeight = fontSize + 2
+    
+    -- Set font size for better readability
+    local currentFont = love.graphics.getFont()
+    if currentFont:getHeight() ~= fontSize then
+        love.graphics.setNewFont(fontSize)
+    end
+    
     love.graphics.setColor(1, 1, 1)
     
-    -- Game state and score
-    love.graphics.print("State: " .. game.state, 10, 10)
-    love.graphics.print("Score: " .. game.score, 10, 30)
+    -- Game state and score - top left
+    local yPos = margin
+    love.graphics.print("State: " .. game.state, margin, yPos)
+    love.graphics.print("Score: " .. game.score, margin, yPos + lineHeight)
     
-    -- Player position
+    -- Player position and info
     if PlayerX[1] then
         local px, py = PlayerX[1].body:getPosition()
-        love.graphics.print("Position: " .. math.floor(px) .. ", " .. math.floor(py), 10, 50)
+        love.graphics.print("Position: " .. math.floor(px) .. ", " .. math.floor(py), margin, yPos + lineHeight * 2)
         
-        -- Velocity
         local vx, vy = PlayerX[1].body:getLinearVelocity()
         local speed = math.sqrt(vx*vx + vy*vy)
-        love.graphics.print("Speed: " .. string.format("%.1f", speed), 10, 70)
+        love.graphics.print("Speed: " .. string.format("%.1f", speed), margin, yPos + lineHeight * 3)
     end
     
     -- Camera info
-    love.graphics.print("Camera Mode: " .. camera.mode, 10, 90)
-    love.graphics.print("Zoom: " .. string.format("%.3f", camera.scale), 10, 110)
+    love.graphics.print("Camera Mode: " .. camera.mode, margin, yPos + lineHeight * 4)
+    love.graphics.print("Zoom: " .. string.format("%.3f", camera.scale), margin, yPos + lineHeight * 5)
     
     -- Planets visited
     local visited = 0
     for _, planet in ipairs(planets) do
         if planet.visited then visited = visited + 1 end
     end
-    love.graphics.print("Planets Visited: " .. visited .. "/" .. #planets, 10, 130)
+    love.graphics.print("Planets Visited: " .. visited .. "/" .. #planets, margin, yPos + lineHeight * 6)
     
-    -- Object counts
-    love.graphics.print("Asteroids: " .. #box_i, 10, 150)
-    love.graphics.print("Enemies: " .. #enemies, 10, 170)
-    love.graphics.print("Black Holes: " .. #blackholes, 10, 190)
-    love.graphics.print("Wormholes: " .. #wormholes, 10, 210)
-    love.graphics.print("Comets: " .. #comets, 10, 230)
-    love.graphics.print("Pulsars: " .. #pulsars, 10, 250)
-    love.graphics.print("Quasars: " .. #quasars, 10, 270)
-    love.graphics.print("Magnetars: " .. #magnetars, 10, 290)
-    love.graphics.print("Space Stations: " .. #spacestations, 10, 310)
+    -- Object counts - only show in two columns if screen is wide enough
+    local objectCountsY = yPos + lineHeight * 7
+    if screenWidth > 800 then
+        -- Two columns for object counts
+        love.graphics.print("Asteroids: " .. #box_i, margin, objectCountsY)
+        love.graphics.print("Enemies: " .. #enemies, margin + 150, objectCountsY)
+        love.graphics.print("Black Holes: " .. #blackholes, margin, objectCountsY + lineHeight)
+        love.graphics.print("Wormholes: " .. #wormholes, margin + 150, objectCountsY + lineHeight)
+        love.graphics.print("Comets: " .. #comets, margin, objectCountsY + lineHeight * 2)
+        love.graphics.print("Pulsars: " .. #pulsars, margin + 150, objectCountsY + lineHeight * 2)
+        love.graphics.print("Quasars: " .. #quasars, margin, objectCountsY + lineHeight * 3)
+        love.graphics.print("Magnetars: " .. #magnetars, margin + 150, objectCountsY + lineHeight * 3)
+        love.graphics.print("Space Stations: " .. #spacestations, margin, objectCountsY + lineHeight * 4)
+        love.graphics.print("Dead Enemies: " .. #deadEnemies, margin + 150, objectCountsY + lineHeight * 4)
+    else
+        -- Single column for smaller screens
+        love.graphics.print("Asteroids: " .. #box_i, margin, objectCountsY)
+        love.graphics.print("Enemies: " .. #enemies, margin, objectCountsY + lineHeight)
+        love.graphics.print("Black Holes: " .. #blackholes, margin, objectCountsY + lineHeight * 2)
+        love.graphics.print("Wormholes: " .. #wormholes, margin, objectCountsY + lineHeight * 3)
+        love.graphics.print("Comets: " .. #comets, margin, objectCountsY + lineHeight * 4)
+        love.graphics.print("Pulsars: " .. #pulsars, margin, objectCountsY + lineHeight * 5)
+        love.graphics.print("Quasars: " .. #quasars, margin, objectCountsY + lineHeight * 6)
+        love.graphics.print("Magnetars: " .. #magnetars, margin, objectCountsY + lineHeight * 7)
+        love.graphics.print("Space Stations: " .. #spacestations, margin, objectCountsY + lineHeight * 8)
+        love.graphics.print("Dead Enemies: " .. #deadEnemies, margin, objectCountsY + lineHeight * 9)
+    end
     
-    -- Ship systems status
-    drawShipSystemsUI()
+    -- Ship systems status - positioned based on screen size
+    drawShipSystemsUI(screenWidth, screenHeight)
     
     -- Debug mode indicator
     if game.debugMode then
         love.graphics.setColor(1, 0, 0)
-        love.graphics.print("DEBUG MODE ACTIVE", 10, 350)
+        love.graphics.print("DEBUG MODE ACTIVE", margin, screenHeight - lineHeight * 3)
         love.graphics.setColor(1, 1, 1)
     end
     
-    -- Game message
+    -- Game message - centered at top
     if game.message ~= "" then
+        local messageWidth = love.graphics.getFont():getWidth(game.message)
         love.graphics.setColor(1, 1, 1)
-        love.graphics.print(game.message, love.graphics.getWidth()/2 - love.graphics.getFont():getWidth(game.message)/2, 50)
+        love.graphics.print(game.message, screenWidth/2 - messageWidth/2, margin)
     end
     
-    -- Instructions
-    love.graphics.print("SOLAR SYSTEM EXPLORATION", love.graphics.getWidth() - 250, 10)
+    -- Instructions - right side, but adjust based on screen width
+    local instructionsX = math.max(screenWidth - 250, screenWidth * 0.6)
+    love.graphics.print("SOLAR SYSTEM EXPLORATION", instructionsX, margin)
     for i, instruction in ipairs(cameraInstructions) do
-        love.graphics.print(instruction, love.graphics.getWidth() - 250, 10 + i * 20)
+        love.graphics.print(instruction, instructionsX, margin + i * lineHeight)
     end
     
-    -- Game controls
-    love.graphics.print("Space Controls:", love.graphics.getWidth() - 250, 310)
-    love.graphics.print("Arrow Keys: Thrusters", love.graphics.getWidth() - 250, 330)
-    love.graphics.print("PageUp/Down: Rotate", love.graphics.getWidth() - 250, 350)
-    love.graphics.print("Shift: Boost", love.graphics.getWidth() - 250, 370)
-    love.graphics.print("Space: Brake", love.graphics.getWidth() - 250, 390)
-    love.graphics.print("L: Land/Takeoff", love.graphics.getWidth() - 250, 410)
-    love.graphics.print("C: Auto Dock", love.graphics.getWidth() - 250, 430)
-    love.graphics.print("Visit planets for points!", love.graphics.getWidth() - 250, 450)
-    love.graphics.print("Use wormholes for teleport!", love.graphics.getWidth() - 250, 470)
-    love.graphics.print("H: Toggle Controls", love.graphics.getWidth() - 250, 490)
+    -- Game controls - adjust position based on available space
+    local controlsY = margin + (#cameraInstructions + 2) * lineHeight
+    if controlsY < screenHeight * 0.7 then
+        love.graphics.print("Space Controls:", instructionsX, controlsY)
+        love.graphics.print("Arrow Keys: Thrusters", instructionsX, controlsY + lineHeight)
+        love.graphics.print("PageUp/Down: Rotate", instructionsX, controlsY + lineHeight * 2)
+        love.graphics.print("Shift: Boost", instructionsX, controlsY + lineHeight * 3)
+        love.graphics.print("Space: Brake", instructionsX, controlsY + lineHeight * 4)
+        love.graphics.print("L: Land/Takeoff", instructionsX, controlsY + lineHeight * 5)
+        love.graphics.print("C: Auto Dock", instructionsX, controlsY + lineHeight * 6)
+        love.graphics.print("F: Fire Weapons", instructionsX, controlsY + lineHeight * 7) -- NEW: Fire control
+        love.graphics.print("Visit planets for points!", instructionsX, controlsY + lineHeight * 8)
+        love.graphics.print("Use wormholes for teleport!", instructionsX, controlsY + lineHeight * 9)
+        love.graphics.print("H: Toggle Controls", instructionsX, controlsY + lineHeight * 10)
+    end
+    
+    -- Weapon cooldown indicator
+    if shipSystems.weapons.cooldown > 0 then
+        local cooldownPercent = shipSystems.weapons.cooldown / shipSystems.weapons.maxCooldown
+        local cooldownWidth = 100
+        local cooldownHeight = 10
+        local cooldownX = screenWidth / 2 - cooldownWidth / 2
+        local cooldownY = screenHeight - 50
+        
+        love.graphics.setColor(1, 0, 0, 0.7)
+        love.graphics.rectangle("fill", cooldownX, cooldownY, cooldownWidth * cooldownPercent, cooldownHeight)
+        
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.rectangle("line", cooldownX, cooldownY, cooldownWidth, cooldownHeight)
+        
+        love.graphics.print("Weapon Cooldown", cooldownX, cooldownY - 15)
+    end
     
     -- Floating text particles
     for _, p in ipairs(particles) do
@@ -2585,63 +3005,64 @@ function drawUI()
     end
 end
 
-function drawShipSystemsUI()
-    local startY = 400
-    local barWidth = 150
-    local barHeight = 15
+function drawShipSystemsUI(screenWidth, screenHeight)
+    local startY = screenHeight - 100
+    local barWidth = math.min(100, screenWidth * 0.2)
+    local barHeight = 7
+    local margin = math.min(20, screenWidth * 0.02)
     
     -- Fuel
     local fuelPercent = shipSystems.fuel / shipSystems.maxFuel
     love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Fuel:", 10, startY)
+    love.graphics.print("Fuel:", margin, startY)
     love.graphics.setColor(1, 0.5, 0)
-    love.graphics.rectangle("fill", 60, startY, barWidth * fuelPercent, barHeight)
+    love.graphics.rectangle("fill", margin + 50, startY, barWidth * fuelPercent, barHeight)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", 60, startY, barWidth, barHeight)
-    love.graphics.print(string.format("%.0f/%.0f", shipSystems.fuel, shipSystems.maxFuel), 220, startY)
+    -- love.graphics.rectangle("line", margin + 50, startY, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.fuel, shipSystems.maxFuel), margin + 50 + barWidth + 5, startY)
     
     -- Health
     local healthPercent = shipSystems.health / shipSystems.maxHealth
     love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Health:", 10, startY + 25)
+    love.graphics.print("Health:", margin, startY + 15)
     love.graphics.setColor(1, 0, 0)
-    love.graphics.rectangle("fill", 60, startY + 25, barWidth * healthPercent, barHeight)
+    love.graphics.rectangle("fill", margin + 50, startY + 15, barWidth * healthPercent, barHeight)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", 60, startY + 25, barWidth, barHeight)
-    love.graphics.print(string.format("%.0f/%.0f", shipSystems.health, shipSystems.maxHealth), 220, startY + 25)
+    -- love.graphics.rectangle("line", margin + 50, startY + 25, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.health, shipSystems.maxHealth), margin + 50 + barWidth + 5, startY + 15)
     
     -- Shields
     local shieldPercent = shipSystems.shields / shipSystems.maxShields
     love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Shields:", 10, startY + 50)
+    love.graphics.print("Shields:", margin, startY + 30)
     love.graphics.setColor(0, 0.5, 1)
-    love.graphics.rectangle("fill", 60, startY + 50, barWidth * shieldPercent, barHeight)
+    love.graphics.rectangle("fill", margin + 50, startY + 30, barWidth * shieldPercent, barHeight)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", 60, startY + 50, barWidth, barHeight)
-    love.graphics.print(string.format("%.0f/%.0f", shipSystems.shields, shipSystems.maxShields), 220, startY + 50)
+    -- love.graphics.rectangle("line", margin + 50, startY + 50, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.shields, shipSystems.maxShields), margin + 50 + barWidth + 5, startY + 30)
     
     -- Energy
     local energyPercent = shipSystems.energy / shipSystems.maxEnergy
     love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Energy:", 10, startY + 75)
+    love.graphics.print("Energy:", margin, startY + 45)
     love.graphics.setColor(0, 1, 0)
-    love.graphics.rectangle("fill", 60, startY + 75, barWidth * energyPercent, barHeight)
+    love.graphics.rectangle("fill", margin + 50, startY + 45, barWidth * energyPercent, barHeight)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", 60, startY + 75, barWidth, barHeight)
-    love.graphics.print(string.format("%.0f/%.0f", shipSystems.energy, shipSystems.maxEnergy), 220, startY + 75)
+    -- love.graphics.rectangle("line", margin + 50, startY + 75, barWidth, barHeight)
+    love.graphics.print(string.format("%.0f/%.0f", shipSystems.energy, shipSystems.maxEnergy), margin + 50 + barWidth + 5, startY + 45)
     
     -- System status
     love.graphics.setColor(1, 1, 1)
     if shipSystems.landed then
-        love.graphics.print("Status: LANDED on " .. shipSystems.landingPlanet.name, 10, startY + 100)
+        love.graphics.print("Status: LANDED on " .. shipSystems.landingPlanet.name, margin, startY + 80)
     elseif shipSystems.docked then
-        love.graphics.print("Status: DOCKED at Space Station", 10, startY + 100)
+        love.graphics.print("Status: DOCKED at Space Station", margin, startY + 80)
     else
-        love.graphics.print("Status: IN FLIGHT", 10, startY + 100)
+        love.graphics.print("Status: IN FLIGHT", margin, startY + 80)
     end
     
     -- Auto dock status
-    love.graphics.print("Auto Dock: " .. (shipSystems.autoDock and "ON" or "OFF"), 10, startY + 120)
+    love.graphics.print("Auto Dock: " .. (shipSystems.autoDock and "ON" or "OFF"), margin, startY + 65)
 end
 
 function drawDebugInfo()
@@ -2756,7 +3177,7 @@ function love.keypressed(key)
         camera.mode = "free_move"
         camera.target = nil
     elseif key == "r" then
-        camera.scale = 0.01  -- Reset to solar system zoom level
+        camera.scale = 0.01
     elseif key == "f5" then
         game.debugMode = not game.debugMode
     elseif key == "p" then
@@ -2766,17 +3187,16 @@ function love.keypressed(key)
             game.state = "playing"
         end
     elseif key == "return" then
-        -- Manual planet visit check
         checkPlanetVisits()
     elseif key == "h" then
-        -- Toggle touch controls visibility
         touchControls.visible = not touchControls.visible
     elseif key == "c" then
-        -- Toggle auto docking computer
         shipSystems.autoDock = not shipSystems.autoDock
         setGameMessage("Auto Dock: " .. (shipSystems.autoDock and "ON" or "OFF"), 2)
     elseif key == "l" then
         -- Landing/takeoff handled in checkLandingConditions
+    elseif key == "f" then -- NEW: Fire weapon
+        fireWeapon()
     end
 end
 
@@ -2791,3 +3211,5 @@ function love.wheelmoved(x, y)
         camera.scale = math.max(camera.scale / zoomFactor, camera.minScale)
     end
 end
+
+
