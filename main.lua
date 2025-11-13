@@ -9,6 +9,8 @@ function love.load()
         message = "",
         messageTimer = 0
     }
+	
+	playerSpeed = 200
     
     -- Physics world setup - ZERO GRAVITY in space
     love.physics.setMeter(64)
@@ -43,23 +45,15 @@ function love.load()
     createAsteroidBelts() -- Create asteroid belts
     createCosmicObjects() -- Create black holes, white holes, wormholes, and nebulae
     createAdvancedCosmicObjects() -- Create comets, pulsars, quasars, supernovae
-    createMagnetars() -- Create magnetars
-    createAsteroidFields() -- Create dense asteroid fields
-    createSpaceStations() -- Create space stations
+    createMagnetars() 
+    createAsteroidFields() 
+    createSpaceStations() 
     createPlayer()
     createEnemies()
     createBalls()
-    
-    -- NEW: Create supermassive black hole
     createSupermassiveBlackHole()
-    
-    -- NEW: Create demon planet
     createDemonPlanet()
-    
-    -- NEW: Create tesseract near supermassive black hole
     createTesseract()
-    
-    -- NEW: Create bio nebulae
     createBioNebulae()
     
     -- Enhanced Camera setup for massive space exploration
@@ -70,7 +64,7 @@ function love.load()
         mode = "follow_player",
         target = nil,
         freeMoveSpeed = 20000, -- Much faster movement for huge space
-        minScale = 0.004,     -- Can zoom out to see entire massive solar system
+        minScale = 0.000001,     -- Can zoom out to see entire massive solar system
         maxScale = 2.0
     }
     
@@ -98,9 +92,9 @@ function love.load()
         showPlayerVectors = true,
         showThrusterDirection = true,
         showPhysicsInfo = true,
-        showObjectCounts = true,
+        showObjectCounts = true, 
         showGravityZones = true,
-        showDetailedInfo = false, -- NEW: Detailed debug info
+        showDetailedInfo = true, -- NEW: Detailed debug info
         totalGravityForce = {x = 0, y = 0, magnitude = 0} -- NEW: Track gravity force on player
     }
     
@@ -358,7 +352,7 @@ end
 function createBioNebulae()
     for i = 1, 3 do
         local angle = love.math.random() * math.pi * 2
-        local distance = love.math.random(80000, 150000)
+        local distance = love.math.random(80000*3, 150000*3)
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
         
@@ -768,57 +762,7 @@ function drawBioNebulae()
     end
 end
 
--- NEW: Create supermassive black hole
-function createSupermassiveBlackHole()
-    local supermassive = {
-        body = love.physics.newBody(world, 0, 500000, "static"), -- Far away from solar system
-        radius = 10000, -- Massive size
-        gravityRadius = 300000, -- Huge gravity reach
-        gravityStrength = 50000000, -- Extremely powerful gravity
-        type = "supermassive_blackhole",
-        rotation = 0,
-        rotationSpeed = 0.001, -- Slow rotation
-        damageRadius = 20000,
-        damagePerSecond = 100, -- High damage
-        name = "SUPERMASSIVE BLACK HOLE"
-    }
-    
-    local shape = love.physics.newCircleShape(supermassive.radius)
-    supermassive.fixture = love.physics.newFixture(supermassive.body, shape, 1)
-    supermassive.fixture:setSensor(true)
-    
-    table.insert(blackholes, supermassive)
-end
 
--- NEW: Create demon planet
-function createDemonPlanet()
-    local angle = love.math.random() * math.pi * 2
-    local distance = love.math.random(120000, 180000) -- Far out
-    local x = math.cos(angle) * distance
-    local y = math.sin(angle) * distance
-    
-    local demon = createPlanet(x, y, 1200, 3000, 60000, "DEMON PLANET", {0.8, 0.1, 0.1})
-    demon.isDemon = true
-    demon.horns = {}
-    demon.orbitRadius = distance
-    demon.orbitSpeed = 0.05
-    demon.orbitAngle = angle
-    demon.initialAngle = angle
-    demon.landingRadius = demon.radius + 100
-    demon.canLand = false -- Can't land on demon planet
-    
-    -- Create horn positions around the planet
-    for i = 1, 8 do
-        local hornAngle = (i / 8) * math.pi * 2
-        table.insert(demon.horns, {
-            angle = hornAngle,
-            length = love.math.random(150, 250),
-            width = love.math.random(30, 60)
-        })
-    end
-    
-    table.insert(planets, demon)
-end
 
 -- NEW: Create a bullet
 function createBullet(x, y, angle)
@@ -961,9 +905,9 @@ end
 -- NEW: Create supermassive black hole
 function createSupermassiveBlackHole()
     local supermassive = {
-        body = love.physics.newBody(world, 0, 500000, "static"), -- Far away from solar system
+        body = love.physics.newBody(world, 0, 1000000, "static"), -- Far away from solar system
         radius = 10000, -- Massive size
-        gravityRadius = 300000, -- Huge gravity reach
+        gravityRadius = 600000, -- Huge gravity reach
         gravityStrength = 50000000, -- Extremely powerful gravity
         type = "supermassive_blackhole",
         rotation = 0,
@@ -983,7 +927,7 @@ end
 -- NEW: Create demon planet
 function createDemonPlanet()
     local angle = love.math.random() * math.pi * 2
-    local distance = love.math.random(120000, 180000) -- Far out
+    local distance = love.math.random(120000*3, 180000*3) -- Far out
     local x = math.cos(angle) * distance
     local y = math.sin(angle) * distance
     
@@ -1151,7 +1095,7 @@ function createMagnetars()
     -- Create magnetars (highly magnetic neutron stars)
     for i = 1, 2 do
         local angle = love.math.random() * math.pi * 2
-        local distance = love.math.random(130000, 200000)
+        local distance = love.math.random(130000*3, 200000*3)
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
         
@@ -1178,7 +1122,7 @@ function createAsteroidFields()
     -- Create dense asteroid fields with more hazards
     for i = 1, 3 do
         local angle = love.math.random() * math.pi * 2
-        local distance = love.math.random(70000, 150000)
+        local distance = love.math.random(70000*3, 150000*3)
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
         
@@ -1251,22 +1195,21 @@ end
 
 function createSolarSystem()
     -- Create the SUN at center with massive gravity
-    local sun = createPlanet(0, 0, 5000, 80000, 500000, "SUN", {1, 1, 0}) -- Yellow sun
-    sun.fixture:setSensor(false) -- Sun is solid
+    local sun = createPlanet(0, 0, 15000, 240000, 1500000, "SUN", {1, 1, 0}) -- 3x larger
+    sun.fixture:setSensor(false)
     sun.isSun = true
     table.insert(planets, sun)
     
-    -- Create planets orbiting the sun with colors
-    -- Format: {orbitRadius, radius, gravityRadius, gravityStrength, name, orbitSpeed, color}
+    -- UPSCALED planet data - 3x larger sizes and distances
     local planetData = {
-        {15000, 800, 2000, 20000, "Mercury", 100, {0.7, 0.7, 0.7}}, -- Gray
-        {25000, 1200, 3000, 35000, "Venus", 130, {0.9, 0.7, 0.3}}, -- Golden
-        {35000, 1500, 4000, 50000, "Earth", 1.0, {0.2, 0.4, 0.9}}, -- Blue
-        {45000, 1300, 3500, 30000, "Mars", 0.8, {0.8, 0.3, 0.2}}, -- Red
-        {60000, 3000, 6000, 150000, "Jupiter", 0.4, {0.8, 0.6, 0.4}}, -- Tan
-        {75000, 2800, 5000, 120000, "Saturn", 0.3, {0.9, 0.8, 0.5}}, -- Light yellow
-        {90000, 2000, 4000, 80000, "Uranus", 0.2, {0.4, 0.7, 0.9}}, -- Light blue
-        {105000, 1900, 3800, 70000, "Neptune", 0.1, {0.2, 0.3, 0.8}}  -- Dark blue
+        {45000, 2400, 6000, 60000, "Mercury", 100, {0.7, 0.7, 0.7}},
+        {75000, 3600, 9000, 105000, "Venus", 130, {0.9, 0.7, 0.3}},
+        {105000, 4500, 12000, 150000, "Earth", 1.0, {0.2, 0.4, 0.9}},
+        {135000, 3900, 10500, 90000, "Mars", 0.8, {0.8, 0.3, 0.2}},
+        {180000, 9000, 18000, 450000, "Jupiter", 0.4, {0.8, 0.6, 0.4}},
+        {225000, 8400, 15000, 360000, "Saturn", 0.3, {0.9, 0.8, 0.5}},
+        {270000, 6000, 12000, 240000, "Uranus", 0.2, {0.4, 0.7, 0.9}},
+        {315000, 5700, 11400, 210000, "Neptune", 0.1, {0.2, 0.3, 0.8}}
     }
     
     for i, data in ipairs(planetData) do
@@ -1292,19 +1235,19 @@ function createCosmicObjects()
     -- Create black holes
     for i = 1, 3 do
         local angle = love.math.random() * math.pi * 2
-        local distance = love.math.random(120000, 200000) -- Far out in space
+        local distance = love.math.random(120000*3, 200000*3) -- Far out in space
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
         
         local blackhole = {
             body = love.physics.newBody(world, x, y, "static"),
-            radius = love.math.random(300, 600),
-            gravityRadius = love.math.random(5000, 15000),
-            gravityStrength = love.math.random(300000, 800000),
+            radius = love.math.random(300*3, 600*3),
+            gravityRadius = love.math.random(5000*3, 15000*3),
+            gravityStrength = love.math.random(300000*3, 800000*3),
             type = "blackhole",
             rotation = 0,
             rotationSpeed = love.math.random(0.01, 0.05),
-            damageRadius = love.math.random(1000, 2000),
+            damageRadius = love.math.random(1000*3, 2000*3),
             damagePerSecond = 50
         }
         
@@ -1418,7 +1361,7 @@ function createAdvancedCosmicObjects()
     -- Create comets
     for i = 1, 8 do
         local angle = love.math.random() * math.pi * 2
-        local distance = love.math.random(50000, 200000)
+        local distance = love.math.random(50000*3, 200000*3)
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
         
@@ -1605,9 +1548,9 @@ end
 function createAsteroidBelts()
     -- Create multiple asteroid belts at different distances
     local beltData = {
-        {minDist = 50000, maxDist = 55000, count = 200}, -- Between Mars and Jupiter
-        {minDist = 80000, maxDist = 85000, count = 150}, -- Beyond Saturn
-        {minDist = 120000, maxDist = 125000, count = 100} -- Outer belt
+        {minDist = 50000*3, maxDist = 55000*3, count = 200}, -- Between Mars and Jupiter
+        {minDist = 80000*3, maxDist = 85000*3, count = 150}, -- Beyond Saturn
+        {minDist = 120000*3, maxDist = 125000*3, count = 100} -- Outer belt
     }
     
     for _, belt in ipairs(beltData) do
@@ -1792,7 +1735,7 @@ function applyBodyGravity(body, px, py, gravityRadius, gravityStrength, dt)
     if distance > 0 and distance < gravityRadius then
         local dirX, dirY = dx / distance, dy / distance
         -- Realistic inverse-square gravity
-        local force = gravityStrength / (distance * distance)
+        local force = gravityStrength*10000 / (distance * distance)
         body:applyForce(dirX * force, dirY * force)
         return {x = dirX * force, y = dirY * force}
     end
@@ -2551,34 +2494,33 @@ function handleTouchInput(buttonId)
     local body = player.body
     local bx, by = body:getWorldPoint(0, player.h / 2)
     local angle = body:getAngle()
-	local speed = 120
     
     if buttonId == "up" then
         if shipSystems.fuel > 0 then
-            body:applyForce(0, -speed)
+            body:applyForce(0, -playerSpeed)
             createPlayerParticle(bx, by, angle)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
         end
     elseif buttonId == "down" then
         if shipSystems.fuel > 0 then
-            body:applyForce(0, speed)
+            body:applyForce(0, playerSpeed)
             createPlayerParticle(bx, by, angle + math.pi)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
         end
     elseif buttonId == "left" then
         if shipSystems.fuel > 0 then
-            body:applyForce(-speed, 0)
+            body:applyForce(-playerSpeed, 0)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.05)
         end
     elseif buttonId == "right" then
         if shipSystems.fuel > 0 then
-            body:applyForce(speed, 0)
+            body:applyForce(playerSpeed, 0)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.05)
         end
     elseif buttonId == "rotate_left" then
-        body:applyTorque(-speed)
+        body:applyTorque(-playerSpeed)
     elseif buttonId == "rotate_right" then
-        body:applyTorque(speed)
+        body:applyTorque(playerSpeed)
     elseif buttonId == "zoom_in" then
         camera.scale = math.min(camera.scale + 0.01, camera.maxScale)
     elseif buttonId == "zoom_out" then
@@ -2594,13 +2536,8 @@ function handleTouchInput(buttonId)
             shipSystems.energy = math.max(0, shipSystems.energy - 10)
         end
     elseif buttonId == "brake" then
-        if shipSystems.energy > 0 then
+			playerSpeed = 100000
             shipSystems.brakesActive = true
-            local vx, vy = body:getLinearVelocity()
-            local brakeForce = 50
-            body:applyForce(-vx * brakeForce, -vy * brakeForce)
-            shipSystems.energy = math.max(0, shipSystems.energy - 5)
-        end
     elseif buttonId == "land" then
         -- Landing/takeoff handled in checkLandingConditions
     elseif buttonId == "fire" then
@@ -2737,8 +2674,8 @@ end
 function drawStars()
     love.graphics.setColor(1, 1, 1, 0.8)
     for i = 1, 1000 do
-        local x = (i * 173) % 50000 - 25000
-        local y = (i * 257) % 50000 - 25000
+        local x = (i * 173) % 50000*9 - 25000*9
+        local y = (i * 257) % 50000*9 - 25000*9
         local size = (i % 3) * 0.5 + 0.5
         love.graphics.points(x, y)
     end
@@ -3102,7 +3039,7 @@ function createPlayer()
 	-- local startX, startY = 500000, 500000
     
     local body = love.physics.newBody(world, startX, startY, "dynamic")
-    local shape = love.physics.newRectangleShape(30, 60) -- Smaller player
+    local shape = love.physics.newRectangleShape(50, 100) -- Smaller player
     local fixture = love.physics.newFixture(body, shape, 1.0)
     fixture:setFriction(0.1)
     fixture:setRestitution(0.2)
@@ -3115,8 +3052,8 @@ function createPlayer()
         body = body,
         shape = shape,
         fixture = fixture,
-        w = 30,  -- Smaller width
-        h = 60, -- Smaller height
+        w = 50,  -- Smaller width
+        h = 100, -- Smaller height
         particles = {}
     }
 end
@@ -3130,7 +3067,6 @@ function updatePlayer(dt)
     -- Get bottom world coordinates
     local bx, by = body:getWorldPoint(0, player.h / 2)
     local angle = body:getAngle()
-    local speed = 120
     
     -- Reset boost/brake states
     shipSystems.boostActive = false
@@ -3140,21 +3076,21 @@ function updatePlayer(dt)
     -- Space movement - apply forces in the direction the player is facing
     if love.keyboard.isDown("right") then
         if shipSystems.fuel > 0 then
-            body:applyForce(speed, 0)
+            body:applyForce(playerSpeed, 0)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
         end
     end
     
     if love.keyboard.isDown("left") then
         if shipSystems.fuel > 0 then
-            body:applyForce(-speed, 0)
+            body:applyForce(-playerSpeed, 0)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
         end
     end
     
     if love.keyboard.isDown("up") then
         if shipSystems.fuel > 0 then
-            body:applyForce(0, -speed)
+            body:applyForce(0, -playerSpeed)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
             
             -- Thruster particles
@@ -3164,7 +3100,7 @@ function updatePlayer(dt)
     
     if love.keyboard.isDown("down") then
         if shipSystems.fuel > 0 then
-            body:applyForce(0, speed)
+            body:applyForce(0, playerSpeed)
             shipSystems.fuel = math.max(0, shipSystems.fuel - 0.1)
             
             -- Thruster particles
@@ -3186,13 +3122,8 @@ function updatePlayer(dt)
 
     -- Brake system
     if love.keyboard.isDown("space") then
-        if shipSystems.energy > 0 then
-            shipSystems.brakesActive = true
-            local vx, vy = body:getLinearVelocity()
-            local brakeForce = 100
-            body:applyForce(-vx * brakeForce, -vy * brakeForce)
-            shipSystems.energy = math.max(0, shipSystems.energy - 10 * dt)
-        end
+		playerSpeed = 10000
+        shipSystems.brakesActive = true
     end
 
     -- Manual rotation in space
@@ -3331,7 +3262,7 @@ function createEnemies()
         local ex = px + math.cos(angle) * dist
         local ey = py + math.sin(angle) * dist
         
-        local enemy = createEnemyObj(ex, ey, 30, 60, 0)
+        local enemy = createEnemyObj(ex, ey, 50, 100, 0)
         
         -- Give enemy orbital velocity
         local speed = math.sqrt(planet.gravityStrength / dist) * 0.9
@@ -3355,8 +3286,8 @@ function createEnemyObj(x, y, w, h, angle)
         body = body,
         shape = shape,
         fixture = fixture,
-        w = 6,
-        h = 12,
+        w = 50,
+        h = 100,
         particles = {},
         health = 30, -- NEW: Enemy health
         maxHealth = 30,
@@ -3524,7 +3455,7 @@ function createBalls()
     -- Create some floating space debris/balls
     for i = 1, 20 do
         local angle = love.math.random() * math.pi * 2
-        local distance = love.math.random(30000, 100000) -- Further out
+        local distance = love.math.random(30000*3, 100000*3) -- Further out
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
         local r = love.math.random(20, 60) -- Larger balls
@@ -3617,7 +3548,7 @@ function updateCamera(dt)
         end
         
     elseif camera.mode == "free_move" then
-        local speed = camera.freeMoveSpeed * dt / 3
+        local speed = camera.freeMoveSpeed * dt / 1
         
         if love.keyboard.isDown("w") or love.keyboard.isDown("up") then
             camera.y = camera.y - speed
