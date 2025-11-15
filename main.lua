@@ -1,8 +1,10 @@
 local bit = require("bit")
+local b2debugDraw = require("b2debugDraw")
 
 function love.load()
     -- Game state
     game = {
+		box2dDebugMode = false,
         debugMode = false,
         state = "playing", -- playing, paused, gameover, landed
         score = 0,
@@ -202,6 +204,15 @@ function love.load()
 			{
                 id = "debug",
                 x = love.graphics.getWidth() - 100,
+                y = 180,
+                width = 50,
+                height = 50,
+                color = {0.2, 0.5, 1, 0.5},
+                active = false
+            },
+			{
+                id = "b2dbg",
+                x = love.graphics.getWidth() - 150,
                 y = 180,
                 width = 50,
                 height = 50,
@@ -1559,7 +1570,7 @@ function createAsteroidBelts()
             local distance = love.math.random(belt.minDist, belt.maxDist)
             local x = math.cos(angle) * distance
             local y = math.sin(angle) * distance
-            local size = love.math.random(10, 50) -- Larger asteroids
+            local size = love.math.random(10*3, 50*3) -- Larger asteroids
             table.insert(box_i, createAsteroidObj(x, y, size))
             
             -- Give asteroids some orbital velocity
@@ -2429,7 +2440,9 @@ function updateTouchButtonPositions()
         elseif button.id == "zoom_out" then
             button.x, button.y = w - 100, 0   
 		elseif button.id == "debug" then
-            button.x, button.y = w - 150, 0
+            button.x, button.y = w - 150, 0	
+		elseif button.id == "b2dbg" then
+            button.x, button.y = w - 200, 0
         elseif button.id == "boost" then
             button.x, button.y = w - 200, h - 250
         elseif button.id == "land" then
@@ -2527,6 +2540,8 @@ function handleTouchInput(buttonId)
         camera.scale = math.max(camera.scale - 0.01, camera.minScale) 
 	elseif buttonId == "debug" then
         game.debugMode = not game.debugMode
+	elseif buttonId == "b2dbg" then
+        game.box2dDebugMode = not game.box2dDebugMode
     elseif buttonId == "boost" then
         if shipSystems.energy > 0 then
             shipSystems.boostActive = true
@@ -2554,40 +2569,49 @@ function love.draw()
     love.graphics.scale(camera.scale)
     love.graphics.translate(-camera.x, -camera.y)
     
-    -- Draw stars in background
-    drawStars()
-    
-    -- Draw nebulae
-    drawNebulae()
-    
-    -- NEW: Draw bio nebulae
-    drawBioNebulae()
-    
-    -- Draw all objects
-    drawSupernovae()
-    drawQuasars()
-    drawPulsars()
-    drawComets()
-    drawMagnetars()
-    drawAsteroidFields()
-    drawSpaceStations()
-    drawWormholes()
-    drawWhiteholes()
-    drawBlackholes() -- This will include the supermassive black hole
-    
-    -- NEW: Draw tesseracts
-    drawTesseracts()
-    
-    drawPlanets() -- This will include the demon planet
-    drawOrbiters()
-    drawAsteroids()
-    drawEnemies() -- Updated to show dead enemies
-    drawBalls()
-    if PlayerX[1] then
-        drawPlayer(PlayerX[1])
-    end
-    drawBullets() -- NEW: Draw bullets
-    drawParticles()
+    if game.box2dDebugMode then
+        -- Box2D debug rendering
+        local width = love.graphics.getWidth()
+        local height = love.graphics.getHeight()
+        
+        local topLeftX = camera.x - (width/2) / camera.scale
+        local topLeftY = camera.y - (height/2) / camera.scale
+        local viewWidth = width / camera.scale
+        local viewHeight = height / camera.scale
+        
+        b2debugDraw(world, topLeftX, topLeftY, viewWidth, viewHeight)
+    else	
+		drawStars()     -- Draw stars in background
+		drawNebulae()
+		drawBioNebulae()
+		
+		-- Draw all objects
+		drawSupernovae()
+		drawQuasars()
+		drawPulsars()
+		drawComets()
+		drawMagnetars()
+		drawAsteroidFields()
+		drawSpaceStations()
+		drawWormholes()
+		drawWhiteholes()
+		drawBlackholes() -- This will include the supermassive black hole
+		
+		-- NEW: Draw tesseracts
+		drawTesseracts()
+		
+		drawPlanets() -- This will include the demon planet
+		drawOrbiters()
+		drawAsteroids()
+		drawEnemies() -- Updated to show dead enemies
+		drawBalls()
+		if PlayerX[1] then
+			drawPlayer(PlayerX[1])
+		end
+		drawParticles()
+	end
+	
+	drawBullets() -- NEW: Draw bullets
     
     -- Draw gravity zones in debug mode
     if game.debugMode and debugInfo.showGravityZones then
@@ -3239,7 +3263,9 @@ function drawTouchControls()
         elseif button.id == "zoom_out" then
             love.graphics.print("-", button.x + button.width/2 - 5, button.y + button.height/2 - 10)    
 		elseif button.id == "debug" then
-            love.graphics.print("dbg", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
+            love.graphics.print("dbg", button.x + button.width/2 - 5, button.y + button.height/2 - 10)	
+		elseif button.id == "b2dbg" then
+            love.graphics.print("b2", button.x + button.width/2 - 5, button.y + button.height/2 - 10)
         elseif button.id == "boost" then
             love.graphics.print("BST", button.x + button.width/2 - 10, button.y + button.height/2 - 10)
         elseif button.id == "brake" then
@@ -3458,7 +3484,7 @@ function createBalls()
         local distance = love.math.random(30000*3, 100000*3) -- Further out
         local x = math.cos(angle) * distance
         local y = math.sin(angle) * distance
-        local r = love.math.random(20, 60) -- Larger balls
+        local r = love.math.random(20*3, 60*3) -- Larger balls
         table.insert(balls, createBallObj(x, y, r, love.math.random(-2, 2), 0.1, 0.5))
     end
 end
@@ -3899,8 +3925,10 @@ function love.keypressed(key)
     elseif key == "r" then
         camera.scale = 0.01
     elseif key == "f5" then
-        game.debugMode = not game.debugMode
-    elseif key == "f6" then
+        game.debugMode = not game.debugMode 
+	elseif key == "f6" then
+        game.box2dDebugMode = not game.box2dDebugMode
+    elseif key == "f7" then
         debugInfo.showDetailedInfo = not debugInfo.showDetailedInfo
     elseif key == "p" then
         if game.state == "playing" then
